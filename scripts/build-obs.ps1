@@ -12,7 +12,10 @@
 param(
     [string]$ObsTag = "32.2.2",
     [string]$DepsDir = (Join-Path $PSScriptRoot "..\deps"),
-    [ValidateSet("Release", "RelWithDebInfo")][string]$Config = "RelWithDebInfo"
+    [ValidateSet("Release", "RelWithDebInfo")][string]$Config = "RelWithDebInfo",
+    # Preset 'windows-x64' di OBS 32.x mewajibkan Visual Studio 2026 + SDK 10.0.26100, sehingga gagal
+    # di Visual Studio 2022 (mis. runner GitHub windows-2022). Karena itu generator diatur sendiri di sini.
+    [string]$Generator = "Visual Studio 17 2022"
 )
 $ErrorActionPreference = "Stop"
 
@@ -42,9 +45,12 @@ if (-not (Test-Path (Join-Path $src "CMakeLists.txt"))) {
 
 Push-Location $src
 try {
-    Write-Host "== Konfigurasi OBS (preset windows-x64, tanpa frontend Qt) ..."
+    Write-Host "== Konfigurasi OBS ($Generator, tanpa frontend Qt) ..."
     # Opsi yang tidak dikenal versi OBS tertentu hanya menghasilkan peringatan CMake.
-    cmake --preset windows-x64 `
+    # Nilai cache di bawah menyalin preset 'windows-x64' OBS (VIRTUALCAM_GUID, GPU_PRIORITY_VAL).
+    cmake -S . -B build_x64 -G $Generator -A x64 `
+        -DVIRTUALCAM_GUID=A3FCE0F5-3493-419F-958A-ABA1250EC20B `
+        -DGPU_PRIORITY_VAL=0 `
         -DENABLE_FRONTEND=OFF `
         -DENABLE_BROWSER=OFF `
         -DENABLE_SCRIPTING=OFF `
