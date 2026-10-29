@@ -8,6 +8,8 @@
 #include <QSettings>
 #include <QTimer>
 
+#include <cstdio>
+
 #ifndef LIVESTUDIO_VERSION
 #define LIVESTUDIO_VERSION "0.0.0-dev"
 #endif
@@ -40,6 +42,11 @@ int main(int argc, char *argv[])
 
 	QString error;
 	if (!ls::ObsEngine::instance().start(vs, &error)) {
+		// Mode tanpa dialog (CI / uji otomatis): jangan menampilkan kotak pesan yang menunggu klik.
+		if (app.arguments().contains("--quiet")) {
+			fprintf(stderr, "Live Studio: mesin libobs gagal dimulai: %s\n", qPrintable(error));
+			return 1;
+		}
 		QMessageBox::critical(nullptr, "Live Studio", "Mesin libobs gagal dimulai:\n\n" + error);
 		return 1;
 	}
