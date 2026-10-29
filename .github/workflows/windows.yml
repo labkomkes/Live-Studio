@@ -1,0 +1,51 @@
+# Build eksperimental Windows (belum diuji oleh penulis). Hasil: artefak installer .exe.
+# Membangun OBS dari source membutuhkan 30+ menit; hasilnya di-cache per tag OBS.
+name: windows-installer
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+env:
+  OBS_TAG: "32.2.2"
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pasang Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.*"
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Pasang Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Cache OBS (hasil build)
+        id: obs-cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: obs-${{ env.OBS_TAG }}-windows-x64-v1
+
+      - name: Build OBS (libobs tanpa UI)
+        if: steps.obs-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/build-obs.ps1 -ObsTag $env:OBS_TAG
+
+      - name: Build Live Studio
+        shell: pwsh
+        run: ./scripts/build-livestudio.ps1 -QtPrefix $env:QT_ROOT_DIR -Config Release
+
+      - name: Paket + installer
+        shell: pwsh
+        run: ./scripts/package-windows.ps1 -QtPrefix $env:QT_ROOT_DIR -Config Release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiveStudio-Setup
+          path: dist/LiveStudio-Setup-*.exe

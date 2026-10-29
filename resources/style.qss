@@ -1,0 +1,30 @@
+QMainWindow, QDialog { background: #1b1d22; }
+QWidget { color: #e6e8ec; font-size: 13px; }
+QDockWidget { titlebar-close-icon: none; font-weight: 600; }
+QDockWidget::title { background: #262932; padding: 6px; }
+QGroupBox { border: 2px solid #3a3f4b; border-radius: 6px; margin-top: 14px; font-weight: 700; }
+QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; }
+QGroupBox#previewBox { border-color: #2e9d3f; }
+QGroupBox#previewBox::title { color: #46d35c; }
+QGroupBox#programBox { border-color: #c92f2f; }
+QGroupBox#programBox::title { color: #ff5a5a; }
+QPushButton, QToolButton { background: #2f333d; border: 1px solid #454b59; border-radius: 4px; padding: 6px 10px; }
+QPushButton:hover, QToolButton:hover { background: #3a3f4b; }
+QPushButton:disabled { color: #777; }
+QPushButton#cutButton { background: #b35a00; border-color: #e08a1e; font-size: 18px; font-weight: 800; }
+QPushButton#takeButton { background: #b32020; border-color: #e04a4a; font-size: 22px; font-weight: 800; }
+QPushButton#ltToggle[live="true"] { background: #b32020; border-color: #e04a4a; font-weight: 800; }
+QListWidget { background: #14161a; border: 1px solid #3a3f4b; }
+QListWidget::item { padding: 6px; }
+QListWidget::item:selected { background: #3a5fa5; }
+QLineEdit, QSpinBox, QComboBox { background: #14161a; border: 1px solid #3a3f4b; border-radius: 3px; padding: 4px; }
+QMenuBar { background: #20232a; }
+QMenu { background: #20232a; border: 1px solid #3a3f4b; }
+QMenu::item:selected { background: #3a5fa5; }
+QToolBar { background: #20232a; border: 0; spacing: 6px; }
+QStatusBar { background: #20232a; }
+QSlider::groove:horizontal { height: 4px; background: #3a3f4b; }
+QSlider::handle:horizontal { background: #c9ccd3; width: 12px; margin: -5px 0; border-radius: 6px; }
+QScrollArea { background: #1b1d22; border: 0; }
+QScrollArea > QWidget > QWidget { background: #1b1d22; }
+QToolButton:checked { background: #b32020; border-color: #e04a4a; }
