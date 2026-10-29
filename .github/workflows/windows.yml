@@ -25,17 +25,30 @@ jobs:
       - name: Pasang Inno Setup
         run: choco install innosetup -y --no-progress
 
-      - name: Cache OBS (hasil build)
+      - name: Pulihkan cache OBS
         id: obs-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          path: deps
-          key: obs-${{ env.OBS_TAG }}-windows-x64-v1
+          path: |
+            deps/obs-install
+            deps/obs-studio/.deps
+          key: obs-${{ env.OBS_TAG }}-windows-x64-v2
 
       - name: Build OBS (libobs tanpa UI)
         if: steps.obs-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: ./scripts/build-obs.ps1 -ObsTag $env:OBS_TAG
+
+      # Disimpan segera setelah OBS selesai (bukan di akhir job) agar build OBS yang lama tidak
+      # hilang bila langkah sesudahnya gagal.
+      - name: Simpan cache OBS
+        if: steps.obs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            deps/obs-install
+            deps/obs-studio/.deps
+          key: obs-${{ env.OBS_TAG }}-windows-x64-v2
 
       - name: Build Live Studio
         shell: pwsh
