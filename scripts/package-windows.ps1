@@ -77,10 +77,17 @@ if (-not $SkipSelfTest) {
     Write-Host "== Uji mandiri (LiveStudio.exe --selftest --quiet)"
     $report = Join-Path $env:APPDATA "LiveStudio\selftest.txt"
     if (Test-Path $report) { Remove-Item $report -Force }
-    $p = Start-Process -FilePath $exe -ArgumentList "--selftest", "--quiet" -Wait -PassThru
+    # Batas waktu 120 detik: bila aplikasi macet (mis. dialog yang menunggu klik), proses dihentikan.
+    $p = Start-Process -FilePath $exe -ArgumentList "--selftest", "--quiet" -PassThru
+    $selfExit = -1
+    if ($p.WaitForExit(120000)) { $selfExit = $p.ExitCode }
+    else { Write-Warning "Uji mandiri tidak selesai dalam 120 detik; proses dihentikan."; try { $p.Kill() } catch {} }
     if (Test-Path $report) { Get-Content $report | Write-Host } else { Write-Warning "Laporan selftest tidak ditemukan ($report)." }
-    if ($p.ExitCode -ne 0) {
-        Write-Warning "Uji mandiri melaporkan FAIL (exit code $($p.ExitCode)). Periksa laporan di atas sebelum merilis."
+    if ($selfExit -ne 0) {
+        Write-Warning "Uji mandiri melaporkan FAIL (exit code $selfExit). Periksa laporan di atas sebelum merilis."
+        $logDir = Join-Path $env:APPDATA "LiveStudio\logs"
+        $lastLog = Get-ChildItem $logDir -Filter "*.log" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+        if ($lastLog) { Write-Host "--- $($lastLog.FullName) (40 baris terakhir) ---"; Get-Content $lastLog.FullName -Tail 40 | Write-Host }
     }
 }
 
