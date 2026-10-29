@@ -68,6 +68,17 @@ try {
     Write-Host "== Install ke $install ..."
     cmake --install build_x64 --config $Config --prefix $install
     Check-Exit "cmake install OBS"
+
+    # Di Windows, header + obs.lib + libobsConfig.cmake (komponen "Development") ditandai EXCLUDE_FROM_ALL
+    # oleh OBS, sehingga TIDAK ikut ter-install di atas. Tanpa ini Live Studio tidak bisa menautkan libobs.
+    Write-Host "== Install komponen Development (header, obs.lib, paket CMake libobs) ..."
+    cmake --install build_x64 --config $Config --prefix $install --component Development
+    Check-Exit "cmake install OBS (Development)"
+
+    $cfg = Get-ChildItem $install -Recurse -Filter "libobsConfig.cmake" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cfg) { throw "libobsConfig.cmake tidak ada di $install setelah install Development." }
+    if (-not (Test-Path (Join-Path $install "bin\64bit\obs.dll"))) { throw "obs.dll tidak ada di $install\bin\64bit." }
+    Write-Host "libobs siap: $($cfg.FullName)"
 }
 finally {
     Pop-Location
