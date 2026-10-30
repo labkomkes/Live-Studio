@@ -1,4 +1,6 @@
-// Live Studio - jendela utama: Preview | CUT/TAKE | Program, dock scene/sumber/audio/lower third/bumper.
+// Live Studio - jendela utama.
+// Atas (gaya OBS Studio Mode): Preview | CUT/TAKE | Program, lalu panel Adegan/Sumber/Audio/Lower Third.
+// Bawah (gaya vMix): deck tile scene dengan thumbnail live + kontrol transisi.
 #pragma once
 
 #include "ProjectorWindow.h"
@@ -9,14 +11,16 @@
 
 class QAction;
 class QScreen;
+class QButtonGroup;
 class QCheckBox;
-class QComboBox;
-class QDockWidget;
+class QFrame;
 class QLabel;
 class QListWidget;
 class QMenu;
 class QPushButton;
 class QSpinBox;
+class QTabWidget;
+class QToolButton;
 
 namespace ls {
 
@@ -28,6 +32,7 @@ class AudioMixerWidget;
 class LowerThirdPanel;
 class BumperPanel;
 class ProjectorWindow;
+class DeckStrip;
 
 class MainWindow : public QMainWindow {
 	Q_OBJECT
@@ -44,9 +49,11 @@ protected:
 private:
 	enum class SourceKind { Webcam, Screen, Window, Video, Image, Text, Mic, DesktopAudio };
 
+	void buildSourceMenu();
 	void buildUi();
-	void buildDocks();
-	void buildMenusAndToolbar();
+	QWidget *buildPanels(QWidget *parent);
+	QWidget *buildDeck(QWidget *parent);
+	void buildMenus();
 	void connectSignals();
 	void applyMode(bool pro);
 	void refreshScenes();
@@ -67,13 +74,16 @@ private:
 
 	ObsDisplayWidget *preview_ = nullptr;
 	ObsDisplayWidget *program_ = nullptr;
+	DeckStrip *deckStrip_ = nullptr;
 	QLabel *previewLabel_ = nullptr;
 	QLabel *programLabel_ = nullptr;
 	QPushButton *cutBtn_ = nullptr;
 	QPushButton *takeBtn_ = nullptr;
-	QComboBox *transitionCombo_ = nullptr;
+	QButtonGroup *transitionGroup_ = nullptr;
 	QSpinBox *durationSpin_ = nullptr;
 	QCheckBox *swapCheck_ = nullptr;
+	QPushButton *ltQuickBtn_ = nullptr;
+	QToolButton *outputBtn_ = nullptr;
 
 	QListWidget *scenesList_ = nullptr;
 	QListWidget *sourcesList_ = nullptr;
@@ -81,11 +91,9 @@ private:
 	LowerThirdPanel *ltPanel_ = nullptr;
 	BumperPanel *bumperPanel_ = nullptr;
 
-	QDockWidget *scenesDock_ = nullptr;
-	QDockWidget *sourcesDock_ = nullptr;
-	QDockWidget *audioDock_ = nullptr;
-	QDockWidget *ltDock_ = nullptr;
-	QDockWidget *bumperDock_ = nullptr;
+	QFrame *scenesPanel_ = nullptr;
+	QFrame *sourcesPanel_ = nullptr;
+	QTabWidget *toolsTabs_ = nullptr;
 
 	QMenu *addSourceMenu_ = nullptr;
 	QMenu *multiviewMenu_ = nullptr;

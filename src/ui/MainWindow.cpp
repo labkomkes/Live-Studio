@@ -7,6 +7,7 @@
 #include "../core/SourceFactory.h"
 #include "AudioMixerWidget.h"
 #include "BumperPanel.h"
+#include "DeckStrip.h"
 #include "LowerThirdPanel.h"
 #include "ObsDisplayWidget.h"
 #include "ProjectorWindow.h"
@@ -16,12 +17,14 @@
 #include <QAction>
 #include <QApplication>
 #include <QActionGroup>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
-#include <QDockWidget>
+#include <QFrame>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -35,13 +38,14 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
 #include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTabWidget>
 #include <QTextEdit>
-#include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -51,6 +55,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
 	setWindowTitle("Live Studio");
 	resize(1500, 900);
+	setMinimumSize(1100, 700);
 
 	sm_ = new SceneManager(this);
 	QString err;
@@ -60,14 +65,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 	lt_->ensureItems();
 	bumper_ = new Bumper(sm_, this);
 
+	buildSourceMenu();
 	buildUi();
-	buildDocks();
-	buildMenusAndToolbar();
+	buildMenus();
 	connectSignals();
 
 	QSettings s("LiveStudio", "LiveStudio");
 	restoreGeometry(s.value("window/geometry").toByteArray());
-	restoreState(s.value("window/state").toByteArray());
 	applyMode(s.value("ui/pro", false).toBool());
 
 	refreshScenes();
@@ -89,6 +93,8 @@ MainWindow::~MainWindow()
 		preview_->destroyDisplay();
 	if (program_)
 		program_->destroyDisplay();
+	if (deckStrip_)
+		deckStrip_->destroyDisplay();
 	render::releaseGraphicsResources();
 	if (audio_)
 		audio_->clear();
@@ -102,7 +108,6 @@ void MainWindow::closeEvent(QCloseEvent *e)
 {
 	QSettings s("LiveStudio", "LiveStudio");
 	s.setValue("window/geometry", saveGeometry());
-	s.setValue("window/state", saveState());
 	s.setValue("ui/pro", pro_);
 	sm_->save();
 	for (auto &p : projectors_)
@@ -141,18 +146,40 @@ QString MainWindow::friendlyType(const QString &id)
 	return id;
 }
 
+void MainWindow::buildSourceMenu()
+{
+	addSourceMenu_ = new QMenu("Tambah Sumber", this);
+	struct Entry {
+		const char *label;
+		SourceKind kind;
+	};
+	const Entry entries[] = {
+		{"Kamera / Webcam…", SourceKind::Webcam},   {"Layar (Monitor)…", SourceKind::Screen},
+		{"Jendela Aplikasi…", SourceKind::Window},  {"File Video…", SourceKind::Video},
+		{"Gambar…", SourceKind::Image},             {"Teks…", SourceKind::Text},
+		{"Mikrofon…", SourceKind::Mic},             {"Audio Desktop (suara komputer)…", SourceKind::DesktopAudio},
+	};
+	for (const Entry &e : entries) {
+		const SourceKind k = e.kind;
+		addSourceMenu_->addAction(e.label, this, [this, k] { addSourceOfKind(k); });
+	}
+}
+
 void MainWindow::buildUi()
 {
 	auto *central = new QWidget(this);
-	auto *root = new QHBoxLayout(central);
-	root->setContentsMargins(8, 8, 8, 8);
-	root->setSpacing(8);
+	auto *root = new QVBoxLayout(central);
+	root->setContentsMargins(6, 6, 6, 6);
+	root->setSpacing(6);
 
 	auto makeBox = [&](const QString &title, ObsDisplayWidget *&display, QLabel *&label, const QString &obj) {
 		auto *box = new QGroupBox(title, central);
 		box->setObjectName(obj);
 		auto *lay = new QVBoxLayout(box);
+		lay->setContentsMargins(4, 4, 4, 4);
+		lay->setSpacing(2);
 		label = new QLabel("-", box);
+		label->setObjectName("monitorName");
 		label->setAlignment(Qt::AlignCenter);
 		display = new ObsDisplayWidget(box);
 		lay->addWidget(label);
@@ -160,64 +187,88 @@ void MainWindow::buildUi()
 		return box;
 	};
 
+	// --- Baris 1 (gaya Studio Mode OBS): Preview | CUT/TAKE | Program ---
 	QGroupBox *previewBox = makeBox("PREVIEW", preview_, previewLabel_, "previewBox");
 	QGroupBox *programBox = makeBox("PROGRAM", program_, programLabel_, "programBox");
 
 	auto *center = new QVBoxLayout();
+	center->setSpacing(8);
 	center->addStretch(1);
 	cutBtn_ = new QPushButton("CUT", central);
 	cutBtn_->setObjectName("cutButton");
-	cutBtn_->setMinimumSize(110, 56);
+	cutBtn_->setFixedSize(104, 54);
 	cutBtn_->setToolTip("Preview -> Program seketika (Enter)");
 	takeBtn_ = new QPushButton("TAKE", central);
 	takeBtn_->setObjectName("takeButton");
-	takeBtn_->setMinimumSize(110, 72);
+	takeBtn_->setFixedSize(104, 70);
 	takeBtn_->setToolTip("Preview -> Program dengan transisi (Spasi)");
-	transitionCombo_ = new QComboBox(central);
-	durationSpin_ = new QSpinBox(central);
-	durationSpin_->setRange(0, 5000);
-	durationSpin_->setSingleStep(100);
-	durationSpin_->setSuffix(" ms");
-	durationSpin_->setValue(sm_->transitionMs());
-	swapCheck_ = new QCheckBox("Tukar Preview\nsetelah TAKE", central);
-	swapCheck_->setChecked(sm_->swapAfterTake());
-
 	center->addWidget(cutBtn_);
 	center->addWidget(takeBtn_);
-	center->addSpacing(12);
-	center->addWidget(new QLabel("Transisi", central));
-	center->addWidget(transitionCombo_);
-	center->addWidget(durationSpin_);
-	center->addWidget(swapCheck_);
 	center->addStretch(1);
 
-	root->addWidget(previewBox, 5);
-	root->addLayout(center, 0);
-	root->addWidget(programBox, 5);
-	setCentralWidget(central);
+	auto *monitors = new QHBoxLayout();
+	monitors->setSpacing(6);
+	monitors->addWidget(previewBox, 1);
+	monitors->addLayout(center, 0);
+	monitors->addWidget(programBox, 1);
+	root->addLayout(monitors, 1);
 
+	// --- Baris 2: panel Adegan | Sumber | Audio | Lower Third/Bumper ---
+	root->addWidget(buildPanels(central), 0);
+
+	// --- Baris 3 (gaya vMix): deck ---
+	root->addWidget(buildDeck(central), 0);
+
+	setCentralWidget(central);
 	preview_->setDrawFn([this](uint32_t cx, uint32_t cy) { render::drawPreview(sm_, cx, cy); });
 	program_->setDrawFn([this](uint32_t cx, uint32_t cy) { render::drawProgram(sm_, cx, cy); });
 }
 
-void MainWindow::buildDocks()
+QWidget *MainWindow::buildPanels(QWidget *parent)
 {
-	// --- Scenes ---
-	scenesDock_ = new QDockWidget("Adegan (Scenes)", this);
-	scenesDock_->setObjectName("scenesDock");
-	{
-		auto *w = new QWidget(scenesDock_);
-		auto *lay = new QVBoxLayout(w);
-		scenesList_ = new QListWidget(w);
-		scenesList_->setToolTip("Klik = Preview, klik dua kali = CUT ke Program. Tombol 1–9 memilih scene.");
-		lay->addWidget(scenesList_, 1);
+	auto *row = new QWidget(parent);
+	row->setFixedHeight(206);
+	auto *lay = new QHBoxLayout(row);
+	lay->setContentsMargins(0, 0, 0, 0);
+	lay->setSpacing(6);
 
-		auto *row = new QHBoxLayout();
-		auto *add = new QPushButton("+", w);
-		auto *del = new QPushButton("−", w);
-		auto *ren = new QPushButton("Ganti nama", w);
+	auto makePanel = [row](const QString &title, QWidget *content) {
+		auto *f = new QFrame(row);
+		f->setObjectName("panel");
+		auto *v = new QVBoxLayout(f);
+		v->setContentsMargins(0, 0, 0, 0);
+		v->setSpacing(0);
+		auto *t = new QLabel(title, f);
+		t->setObjectName("panelTitle");
+		v->addWidget(t);
+		v->addWidget(content, 1);
+		return f;
+	};
+	auto miniBtn = [](const QString &text, const QString &tip, QWidget *p) {
+		auto *b = new QPushButton(text, p);
+		b->setObjectName("miniBtn");
+		b->setToolTip(tip);
+		return b;
+	};
+
+	// --- Adegan ---
+	{
+		auto *w = new QWidget(row);
+		auto *v = new QVBoxLayout(w);
+		v->setContentsMargins(4, 4, 4, 4);
+		v->setSpacing(4);
+		scenesList_ = new QListWidget(w);
+		scenesList_->setToolTip("Klik = Preview, klik dua kali = CUT ke Program. Tombol 1–9 memilih adegan.");
+		v->addWidget(scenesList_, 1);
+
+		auto *btns = new QHBoxLayout();
+		btns->setSpacing(4);
+		auto *add = miniBtn("+", "Adegan baru", w);
+		auto *del = miniBtn("−", "Hapus adegan", w);
+		auto *ren = miniBtn("Nama", "Ganti nama adegan", w);
 		auto *tpl = new QToolButton(w);
-		tpl->setText("Template ▾");
+		tpl->setObjectName("miniBtn");
+		tpl->setText("Templat ▾");
 		tpl->setPopupMode(QToolButton::InstantPopup);
 		auto *tplMenu = new QMenu(tpl);
 		tplMenu->addAction("Segera Dimulai", this, [this] {
@@ -233,12 +284,11 @@ void MainWindow::buildDocks()
 			sm_->createSlateScene("Terima Kasih", "Terima kasih telah bergabung", QColor(20, 70, 50));
 		});
 		tpl->setMenu(tplMenu);
-		row->addWidget(add);
-		row->addWidget(del);
-		row->addWidget(ren, 1);
-		row->addWidget(tpl);
-		lay->addLayout(row);
-		scenesDock_->setWidget(w);
+		btns->addWidget(add);
+		btns->addWidget(del);
+		btns->addWidget(ren);
+		btns->addWidget(tpl, 1);
+		v->addLayout(btns);
 
 		connect(add, &QPushButton::clicked, this, [this] {
 			bool ok = false;
@@ -267,33 +317,33 @@ void MainWindow::buildDocks()
 			if (ok && !sm_->renameScene(old, n))
 				QMessageBox::information(this, "Adegan", "Nama tidak valid atau sudah dipakai.");
 		});
+		scenesPanel_ = makePanel("Adegan", w);
 	}
-	addDockWidget(Qt::LeftDockWidgetArea, scenesDock_);
 
-	// --- Sources ---
-	sourcesDock_ = new QDockWidget("Sumber (scene Preview)", this);
-	sourcesDock_->setObjectName("sourcesDock");
+	// --- Sumber ---
 	{
-		auto *w = new QWidget(sourcesDock_);
-		auto *lay = new QVBoxLayout(w);
+		auto *w = new QWidget(row);
+		auto *v = new QVBoxLayout(w);
+		v->setContentsMargins(4, 4, 4, 4);
+		v->setSpacing(4);
 		sourcesList_ = new QListWidget(w);
-		lay->addWidget(sourcesList_, 1);
+		v->addWidget(sourcesList_, 1);
 
-		auto *row = new QHBoxLayout();
+		auto *btns = new QHBoxLayout();
+		btns->setSpacing(4);
 		auto *addBtn = new QToolButton(w);
-		addBtn->setText("Tambah ▾");
+		addBtn->setObjectName("miniBtn");
+		addBtn->setText("＋ Tambah ▾");
 		addBtn->setPopupMode(QToolButton::InstantPopup);
-		addBtn->setMenu(new QMenu(addBtn)); // diisi di buildMenusAndToolbar()
-		auto *up = new QPushButton("↑", w);
-		auto *down = new QPushButton("↓", w);
-		auto *rm = new QPushButton("Hapus", w);
-		row->addWidget(addBtn);
-		row->addWidget(up);
-		row->addWidget(down);
-		row->addWidget(rm, 1);
-		lay->addLayout(row);
-		sourcesDock_->setWidget(w);
-		sourcesDock_->setProperty("addButton", QVariant::fromValue<QObject *>(addBtn));
+		addBtn->setMenu(addSourceMenu_);
+		auto *up = miniBtn("↑", "Naikkan lapisan", w);
+		auto *down = miniBtn("↓", "Turunkan lapisan", w);
+		auto *rm = miniBtn("Hapus", "Hapus sumber terpilih", w);
+		btns->addWidget(addBtn, 1);
+		btns->addWidget(up);
+		btns->addWidget(down);
+		btns->addWidget(rm);
+		v->addLayout(btns);
 
 		auto currentName = [this]() -> QString {
 			auto *it = sourcesList_->currentItem();
@@ -320,53 +370,119 @@ void MainWindow::buildDocks()
 			sm_->setItemVisible(editedScene(), it->data(Qt::UserRole).toString(),
 					    it->checkState() == Qt::Checked);
 		});
+		sourcesPanel_ = makePanel("Sumber", w);
 	}
-	addDockWidget(Qt::LeftDockWidgetArea, sourcesDock_);
 
-	// --- Audio mixer ---
-	audioDock_ = new QDockWidget("Audio Mixer", this);
-	audioDock_->setObjectName("audioDock");
-	audio_ = new AudioMixerWidget(audioDock_);
-	audioDock_->setWidget(audio_);
-	addDockWidget(Qt::RightDockWidgetArea, audioDock_);
+	// --- Audio Mixer ---
+	audio_ = new AudioMixerWidget(row);
+	QFrame *audioPanel = makePanel("Audio Mixer", audio_);
 
-	// --- Lower third ---
-	ltDock_ = new QDockWidget("Lower Third", this);
-	ltDock_->setObjectName("ltDock");
-	ltPanel_ = new LowerThirdPanel(lt_, ltDock_);
-	ltDock_->setWidget(ltPanel_);
-	addDockWidget(Qt::RightDockWidgetArea, ltDock_);
+	// --- Lower Third / Bumper (tab) ---
+	toolsTabs_ = new QTabWidget(row);
+	toolsTabs_->setObjectName("toolsTabs");
+	auto scrolled = [](QWidget *inner) {
+		auto *sa = new QScrollArea();
+		sa->setWidgetResizable(true);
+		sa->setFrameShape(QFrame::NoFrame);
+		sa->setWidget(inner);
+		return sa;
+	};
+	ltPanel_ = new LowerThirdPanel(lt_);
+	bumperPanel_ = new BumperPanel(bumper_, sm_);
+	toolsTabs_->addTab(scrolled(ltPanel_), "Lower Third");
+	toolsTabs_->addTab(scrolled(bumperPanel_), "Bumper");
 
-	// --- Bumper ---
-	bumperDock_ = new QDockWidget("Bumper Webinar", this);
-	bumperDock_->setObjectName("bumperDock");
-	bumperPanel_ = new BumperPanel(bumper_, sm_, bumperDock_);
-	bumperDock_->setWidget(bumperPanel_);
-	addDockWidget(Qt::BottomDockWidgetArea, bumperDock_);
+	lay->addWidget(scenesPanel_, 3);
+	lay->addWidget(sourcesPanel_, 4);
+	lay->addWidget(audioPanel, 5);
+	lay->addWidget(toolsTabs_, 5);
+	return row;
 }
 
-void MainWindow::buildMenusAndToolbar()
+QWidget *MainWindow::buildDeck(QWidget *parent)
 {
-	// ---- menu "Sumber" (dipakai toolbar + dock Sumber) ----
-	addSourceMenu_ = new QMenu("Tambah Sumber", this);
-	struct Entry {
-		const char *label;
-		SourceKind kind;
-	};
-	const Entry entries[] = {
-		{"Kamera / Webcam…", SourceKind::Webcam},   {"Layar (Monitor)…", SourceKind::Screen},
-		{"Jendela Aplikasi…", SourceKind::Window},  {"File Video…", SourceKind::Video},
-		{"Gambar…", SourceKind::Image},             {"Teks…", SourceKind::Text},
-		{"Mikrofon…", SourceKind::Mic},             {"Audio Desktop (suara komputer)…", SourceKind::DesktopAudio},
-	};
-	for (const Entry &e : entries) {
-		const SourceKind k = e.kind;
-		addSourceMenu_->addAction(e.label, this, [this, k] { addSourceOfKind(k); });
-	}
-	if (auto *btn = qobject_cast<QToolButton *>(sourcesDock_->property("addButton").value<QObject *>()))
-		btn->setMenu(addSourceMenu_);
+	auto *deck = new QFrame(parent);
+	deck->setObjectName("deck");
+	deck->setMinimumHeight(188);
+	auto *h = new QHBoxLayout(deck);
+	h->setContentsMargins(0, 0, 0, 0);
+	h->setSpacing(0);
 
-	// ---- menu bar ----
+	deckStrip_ = new DeckStrip(sm_, deck);
+	h->addWidget(deckStrip_, 1);
+
+	auto *side = new QFrame(deck);
+	side->setObjectName("deckSide");
+	side->setFixedWidth(310);
+	auto *g = new QVBoxLayout(side);
+	g->setContentsMargins(10, 8, 10, 8);
+	g->setSpacing(6);
+
+	auto *heading = new QLabel("TRANSISI", side);
+	heading->setObjectName("deckHeading");
+	g->addWidget(heading);
+
+	auto *grid = new QGridLayout();
+	grid->setSpacing(4);
+	transitionGroup_ = new QButtonGroup(this);
+	transitionGroup_->setExclusive(true);
+	int i = 0;
+	for (const auto &p : SceneManager::availableTransitions()) {
+		auto *b = new QToolButton(side);
+		b->setObjectName("transBtn");
+		b->setText(p.second == "fade_to_color_transition" ? QString("Warna") : p.first);
+		b->setCheckable(true);
+		b->setProperty("kind", p.second);
+		b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+		transitionGroup_->addButton(b);
+		grid->addWidget(b, i / 3, i % 3);
+		++i;
+	}
+	g->addLayout(grid);
+
+	auto *dur = new QHBoxLayout();
+	dur->addWidget(new QLabel("Durasi", side));
+	durationSpin_ = new QSpinBox(side);
+	durationSpin_->setRange(0, 5000);
+	durationSpin_->setSingleStep(100);
+	durationSpin_->setSuffix(" ms");
+	durationSpin_->setValue(sm_->transitionMs());
+	dur->addWidget(durationSpin_, 1);
+	g->addLayout(dur);
+
+	swapCheck_ = new QCheckBox("Tukar Preview setelah TAKE", side);
+	swapCheck_->setChecked(sm_->swapAfterTake());
+	g->addWidget(swapCheck_);
+	g->addStretch(1);
+
+	auto *btns = new QHBoxLayout();
+	btns->setSpacing(4);
+	ltQuickBtn_ = new QPushButton("Lower Third", side);
+	ltQuickBtn_->setObjectName("ltQuick");
+	ltQuickBtn_->setCheckable(true);
+	ltQuickBtn_->setToolTip("Tampilkan / sembunyikan lower third (isi di tab Lower Third)");
+	auto *addBtn = new QToolButton(side);
+	addBtn->setObjectName("deckTool");
+	addBtn->setText("＋ Sumber ▾");
+	addBtn->setPopupMode(QToolButton::InstantPopup);
+	addBtn->setMenu(addSourceMenu_);
+	addBtn->setToolTip("Tambah kamera, layar, jendela, video, gambar, teks, atau audio");
+	outputBtn_ = new QToolButton(side);
+	outputBtn_->setObjectName("deckTool");
+	outputBtn_->setText("Output ▾");
+	outputBtn_->setPopupMode(QToolButton::InstantPopup);
+	outputBtn_->setToolTip("Kirim Program / Preview / Multiview ke monitor lain");
+	btns->addWidget(ltQuickBtn_, 1);
+	btns->addWidget(addBtn, 1);
+	btns->addWidget(outputBtn_, 1);
+	g->addLayout(btns);
+
+	h->addWidget(side, 0);
+	return deck;
+}
+
+void MainWindow::buildMenus()
+{
 	QMenu *file = menuBar()->addMenu("&File");
 	file->addAction("Simpan koleksi scene", this, [this] {
 		statusBar()->showMessage(sm_->save() ? "Koleksi scene disimpan." : "Gagal menyimpan koleksi.", 4000);
@@ -380,15 +496,10 @@ void MainWindow::buildMenusAndToolbar()
 	modeAction_->setCheckable(true);
 	connect(modeAction_, &QAction::toggled, this, [this](bool on) { applyMode(on); });
 	view->addSeparator();
-	view->addAction(scenesDock_->toggleViewAction());
-	view->addAction(sourcesDock_->toggleViewAction());
-	view->addAction(audioDock_->toggleViewAction());
-	view->addAction(ltDock_->toggleViewAction());
-	view->addAction(bumperDock_->toggleViewAction());
-
-	multiviewMenu_ = menuBar()->addMenu("&Multiview");
 	programOutMenu_ = view->addMenu("Program Output ke monitor");
 	previewOutMenu_ = view->addMenu("Preview Output ke monitor");
+
+	multiviewMenu_ = menuBar()->addMenu("&Multiview");
 	fillScreenMenu(multiviewMenu_, int(ProjectorWindow::Mode::Multiview));
 	fillScreenMenu(programOutMenu_, int(ProjectorWindow::Mode::Program));
 	fillScreenMenu(previewOutMenu_, int(ProjectorWindow::Mode::Preview));
@@ -400,20 +511,15 @@ void MainWindow::buildMenusAndToolbar()
 	connect(previewOutMenu_, &QMenu::aboutToShow, this,
 		[this] { fillScreenMenu(previewOutMenu_, int(ProjectorWindow::Mode::Preview)); });
 
+	// Tombol "Output ▾" di deck memakai menu yang sama.
+	auto *outMenu = new QMenu(outputBtn_);
+	outMenu->addMenu(programOutMenu_);
+	outMenu->addMenu(previewOutMenu_);
+	outMenu->addMenu(multiviewMenu_);
+	outputBtn_->setMenu(outMenu);
+
 	QMenu *help = menuBar()->addMenu("&Bantuan");
 	help->addAction("Tentang Live Studio", this, &MainWindow::showAbout);
-
-	// ---- toolbar ----
-	QToolBar *tb = addToolBar("Utama");
-	tb->setObjectName("mainToolbar");
-	tb->setMovable(false);
-	auto *addTool = new QToolButton(tb);
-	addTool->setText("＋ Tambah Sumber");
-	addTool->setPopupMode(QToolButton::InstantPopup);
-	addTool->setMenu(addSourceMenu_);
-	tb->addWidget(addTool);
-	tb->addSeparator();
-	tb->addAction(modeAction_);
 }
 
 void MainWindow::fillScreenMenu(QMenu *menu, int mode)
@@ -452,11 +558,27 @@ void MainWindow::connectSignals()
 	connect(takeBtn_, &QPushButton::clicked, sm_, &SceneManager::take);
 	connect(swapCheck_, &QCheckBox::toggled, this, [this](bool on) { sm_->setSwapAfterTake(on); });
 
-	auto applyTransition = [this] {
-		sm_->setTransition(transitionCombo_->currentData().toString(), durationSpin_->value());
-	};
-	connect(transitionCombo_, &QComboBox::currentIndexChanged, this, applyTransition);
-	connect(durationSpin_, &QSpinBox::valueChanged, this, applyTransition);
+	connect(transitionGroup_, &QButtonGroup::buttonToggled, this, [this](QAbstractButton *b, bool on) {
+		if (on)
+			sm_->setTransition(b->property("kind").toString(), durationSpin_->value());
+	});
+	connect(durationSpin_, &QSpinBox::valueChanged, this,
+		[this](int ms) { sm_->setTransition(QString(), ms); });
+
+	// Deck ala vMix.
+	connect(deckStrip_, &DeckStrip::previewRequested, this, [this](const QString &n) { sm_->setPreview(n); });
+	connect(deckStrip_, &DeckStrip::cutRequested, this, [this](const QString &n) { sm_->sendToProgram(n, false); });
+	connect(deckStrip_, &DeckStrip::takeRequested, this, [this](const QString &n) { sm_->sendToProgram(n, true); });
+	connect(ltQuickBtn_, &QPushButton::toggled, this, [this](bool on) {
+		if (on)
+			lt_->show();
+		else
+			lt_->hide();
+	});
+	connect(lt_, &LowerThird::visibilityChanged, this, [this](bool shown) {
+		QSignalBlocker b(ltQuickBtn_);
+		ltQuickBtn_->setChecked(shown);
+	});
 
 	connect(sm_, &SceneManager::scenesChanged, this, [this] {
 		render::clearLabelCache();
@@ -559,7 +681,8 @@ void MainWindow::refreshItems()
 		it->setCheckState(info.visible ? Qt::Checked : Qt::Unchecked);
 		sourcesList_->addItem(it);
 	}
-	sourcesDock_->setWindowTitle(QString("Sumber — %1").arg(editedScene()));
+	if (auto *t = sourcesPanel_->findChild<QLabel *>("panelTitle"))
+		t->setText(QString("Sumber — %1").arg(editedScene()));
 }
 
 void MainWindow::refreshOutputLabels()
@@ -570,12 +693,15 @@ void MainWindow::refreshOutputLabels()
 
 void MainWindow::refreshTransitionControls()
 {
-	QSignalBlocker b1(transitionCombo_);
-	transitionCombo_->clear();
-	for (const auto &p : SceneManager::availableTransitions())
-		transitionCombo_->addItem(p.first, p.second);
-	const int idx = transitionCombo_->findData(sm_->transitionKind());
-	transitionCombo_->setCurrentIndex(idx >= 0 ? idx : 0);
+	QSignalBlocker block(transitionGroup_);
+	bool any = false;
+	for (auto *btn : transitionGroup_->buttons()) {
+		const bool on = btn->property("kind").toString() == sm_->transitionKind();
+		btn->setChecked(on);
+		any = any || on;
+	}
+	if (!any && !transitionGroup_->buttons().isEmpty())
+		transitionGroup_->buttons().first()->setChecked(true);
 }
 
 // ------------------------------------------------------------------ mode
@@ -583,17 +709,20 @@ void MainWindow::refreshTransitionControls()
 void MainWindow::applyMode(bool pro)
 {
 	pro_ = pro;
-	sourcesDock_->setVisible(pro);
-	bumperDock_->setVisible(pro);
-	scenesDock_->setVisible(true);
-	audioDock_->setVisible(true);
-	ltDock_->setVisible(true);
+	// Mode Sederhana: monitor + deck + audio + lower third. Mode Profesional: tambah daftar Adegan, Sumber, Bumper, Multiview.
+	scenesPanel_->setVisible(pro);
+	sourcesPanel_->setVisible(pro);
+	toolsTabs_->setTabVisible(1, pro);
+	if (!pro)
+		toolsTabs_->setCurrentIndex(0);
 	multiviewMenu_->menuAction()->setVisible(pro);
 
 	QSignalBlocker block(modeAction_);
 	modeAction_->setChecked(pro);
-	modeAction_->setText(pro ? "Mode Profesional ✓" : "Mode Sederhana");
-	statusBar()->showMessage(pro ? "Mode Profesional: semua panel + Multiview." : "Mode Sederhana.", 3000);
+	modeAction_->setText(pro ? "Mode Profesional ✓" : "Mode Profesional");
+	statusBar()->showMessage(pro ? "Mode Profesional: daftar Adegan, Sumber, Bumper, dan Multiview ditampilkan."
+				      : "Mode Sederhana.",
+				 3000);
 }
 
 // ------------------------------------------------------------------ tambah sumber

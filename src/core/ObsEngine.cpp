@@ -65,7 +65,10 @@ QString ObsEngine::configDir() const
 // frontend itu; memuatnya menghasilkan galat dan dapat membuat aplikasi crash.
 static bool isDeniedModule(const QString &name)
 {
-	static const QStringList denied = {"frontend-tools", "obs-websocket", "obs-browser"};
+	// obs-vst & plugin *-ui memakai Qt/frontend OBS (versi Qt berbeda dari Qt Live Studio -> "Entry Point Not Found").
+	static const QStringList denied = {"frontend-tools",     "obs-websocket",   "obs-browser",
+					   "obs-vst",            "decklink-captions", "decklink-output-ui",
+					   "aja-output-ui"};
 	return denied.contains(name, Qt::CaseInsensitive);
 }
 
@@ -102,7 +105,15 @@ static void loadModuleCb(void *param, const obs_module_info2 *info)
 void ObsEngine::loadModules()
 {
 	ModuleLoadCtx ctx;
+#ifdef _WIN32
+	// Plugin yang gagal dimuat (DLL/entry point hilang) cukup dicatat di log, bukan dialog modal
+	// "Entry Point Not Found" yang menghentikan aplikasi.
+	const UINT oldMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+#endif
 	obs_find_modules2(loadModuleCb, &ctx);
+#ifdef _WIN32
+	SetErrorMode(oldMode);
+#endif
 	blog(LOG_INFO, "Live Studio: modul dimuat=%d, gagal=%d, dilewati=%d", ctx.loaded, ctx.failed, ctx.skipped);
 }
 

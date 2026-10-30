@@ -65,6 +65,7 @@ set(LS_CORE_SOURCES
   src/core/SourceFactory.cpp
   src/ui/AudioMixerWidget.cpp
   src/ui/BumperPanel.cpp
+  src/ui/DeckStrip.cpp
   src/ui/LowerThirdPanel.cpp
   src/ui/MainWindow.cpp
   src/ui/ObsDisplayWidget.cpp
@@ -110,9 +111,12 @@ if(WIN32 AND LIVESTUDIO_OBS_RUNTIME_DIR)
           PATTERN "obs64.exe" EXCLUDE PATTERN "obs-frontend-api.dll" EXCLUDE)
   install(DIRECTORY "${LIVESTUDIO_OBS_RUNTIME_DIR}/obs-plugins/" DESTINATION obs-plugins
           PATTERN "frontend-tools.dll" EXCLUDE PATTERN "obs-websocket.dll" EXCLUDE
+          PATTERN "obs-vst.dll" EXCLUDE PATTERN "decklink-captions.dll" EXCLUDE
+          PATTERN "decklink-output-ui.dll" EXCLUDE PATTERN "aja-output-ui.dll" EXCLUDE
           PATTERN "*.pdb" EXCLUDE)
   install(DIRECTORY "${LIVESTUDIO_OBS_RUNTIME_DIR}/data/" DESTINATION data
-          PATTERN "obs-plugins/frontend-tools" EXCLUDE PATTERN "obs-plugins/obs-websocket" EXCLUDE)
+          PATTERN "obs-plugins/frontend-tools" EXCLUDE PATTERN "obs-plugins/obs-websocket" EXCLUDE
+          PATTERN "obs-plugins/obs-vst" EXCLUDE)
 endif()
 
 # Qt runtime: windeployqt dijalankan oleh scripts/package-windows.ps1 setelah install.

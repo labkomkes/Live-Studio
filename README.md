@@ -18,6 +18,7 @@ sedikit panel) dan **Profesional** (semua panel).
 | Audio mixer (meter, mute, volume) | `src/ui/AudioMixerWidget.*` |
 | Lower third | `src/core/LowerThird.*`, `src/ui/LowerThirdPanel.*` |
 | Bumper webinar (putar video bumper lalu kembali ke scene sebelumnya) | `src/core/Bumper.*`, `src/ui/BumperPanel.*` |
+| **Deck ala vMix**: tile scene dengan thumbnail live, CUT/TAKE per tile, tombol transisi | `src/ui/DeckStrip.*`, `DeckLayout.h`, `Render.cpp` |
 | Multiview & proyektor ke monitor pilihan | `src/ui/ProjectorWindow.*`, `MainWindow.*` |
 | Installer `.exe` (Inno Setup) | `installer/LiveStudio.iss`, `scripts/package-windows.ps1` |
 

@@ -24,4 +24,10 @@ mencakup tampilan visual, kualitas kamera, level audio nyata, maupun multi-monit
 | 17 | Simpan | Buat scene, tutup, buka lagi | Scene & sumber kembali | |
 | 18 | Tutup bersih | Tutup jendela | Proses berakhir, tidak ada crash/hang | |
 | 19 | Stabil | Biarkan 1 jam dengan kamera + layar | Tidak crash, memori stabil | |
+| 21 | Deck: tile | Klik tile scene di deck | Preview berganti ke scene itu; border hijau | |
+| 22 | Deck: CUT tile | Klik tombol CUT pada sebuah tile | Program langsung berganti; border merah | |
+| 23 | Deck: TAKE tile | Klik tombol TAKE pada tile | Program berganti dengan transisi | |
+| 24 | Deck: transisi | Pilih Cut / Fade / Swipe; ubah durasi | TAKE memakai transisi terpilih | |
+| 25 | Deck: banyak scene | Buat 12+ scene; putar roda mouse di deck | Daftar tile bergeser, klik tetap tepat | |
+| 26 | Deck: tampilan layar kecil / DPI 150% | Jalankan di laptop 1366x768 dan skala 150% | Semua kontrol terlihat; klik tile tepat | |
 | 20 | Installer | Pasang di PC bersih, jalankan, copot | Terpasang, jalan, tercopot | |

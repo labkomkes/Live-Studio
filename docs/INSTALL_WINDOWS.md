@@ -17,9 +17,16 @@ Mencopot: Settings > Apps > Live Studio. Data pengguna di `%APPDATA%\LiveStudio`
 Jalankan **Live Studio - Uji Mandiri**. Laporan tersimpan di `%APPDATA%\LiveStudio\selftest.txt`.
 `FAIL` pada kamera/monitor/WASAPI berarti plugin tidak termuat; kirim laporan itu.
 
+## Tampilan
+
+- **Atas (gaya OBS Studio Mode):** monitor **Preview** (kiri), tombol **CUT** dan **TAKE** (tengah), monitor **Program** (kanan). Di bawahnya panel Adegan, Sumber, Audio Mixer, dan tab Lower Third / Bumper.
+- **Bawah (gaya vMix), deck:** satu tile per scene dengan gambar live. Border **merah = Program**, **hijau = Preview**. Klik tile = Preview; tombol **CUT** pada tile = langsung ke Program; tombol **TAKE** pada tile = ke Program dengan transisi; klik dua kali = CUT; roda mouse menggeser daftar bila tile tidak muat. Di kanan deck: tombol transisi (Cut, Fade, Swipe, Slide, Warna), durasi, **Lower Third**, **＋ Sumber**, dan **Output** (kirim ke monitor lain).
+- **Mode Sederhana** (bawaan) menyembunyikan panel Adegan, Sumber, dan tab Bumper, serta menu Multiview. **Mode Profesional**: menu *Tampilan* > Mode Profesional.
+- Pintasan: **1–9** pilih scene ke Preview, **Spasi** = TAKE, **Enter** = CUT.
+
 ## Alur pakai singkat
 
-1. **Tambah sumber** (menu *Tambah Sumber*): Kamera, Layar, Jendela, Video, Gambar, Teks, Mikrofon, Audio Desktop.
+1. **Tambah sumber** (tombol **＋ Sumber** di deck, atau panel Sumber di mode Profesional): Kamera, Layar, Jendela, Video, Gambar, Teks, Mikrofon, Audio Desktop.
    Sumber ditambahkan ke scene yang sedang berada di **Preview**.
 2. Atur scene di Preview; tekan **CUT** (instan) atau **TAKE** (transisi) untuk menayangkan ke **Program**.
 3. **Audio mixer**: atur volume dan Mute per sumber.

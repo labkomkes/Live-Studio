@@ -64,7 +64,9 @@ Tata letak runtime yang diharapkan aplikasi (mengikuti OBS):
 | `libobs tidak ditemukan` | Isi `-DOBS_INSTALL_DIR` dengan folder hasil `cmake --install` OBS, atau `-Dlibobs_DIR=<folder libobsConfig.cmake>`. |
 | `pthread.h: No such file` | Set `-DW32_PTHREADS_INCLUDE_DIR=<deps\obs-studio\.deps\obs-deps-...\include>`. |
 | `Qt6 tidak ditemukan` | Berikan `-QtPrefix` ke folder `msvc2022_64` (bukan `mingw`). |
-| `cmake --preset windows-x64` tidak dikenal | Tag OBS terlalu lama; pakai `-ObsTag` 31+ . |
+| Konfigurasi OBS gagal: `Visual Studio 18 2026` tidak ditemukan | Preset bawaan OBS 32.x butuh VS 2026. `build-obs.ps1` kini memakai `-Generator "Visual Studio 17 2022"` (bisa diganti lewat parameter). |
+| Dialog `avcodec-62.dll / avformat-62.dll / avutil-60.dll / swscale-9.dll was not found` | DLL FFmpeg dari paket obs-deps tidak ikut terpasang (`cmake --install` OBS tidak menyalinnya). `package-windows.ps1` kini menyalin `deps\obs-studio\.deps\obs-deps-*\bin\*.dll` ke `bin\64bit` dan memeriksa dependensi dengan `dumpbin`; build berhenti dengan daftar `HILANG: ...` bila masih ada yang kurang. |
+| Dialog `Entry Point Not Found ... obs-vst.dll` (atau plugin lain yang memakai Qt) | Plugin OBS yang dibangun dengan Qt bawaan obs-deps tidak cocok dengan Qt aplikasi. `obs-vst`, `decklink-*-ui`, `aja-output-ui` kini dikecualikan dari install dan ditolak saat start. Bila ada plugin lain: hapus DLL-nya dari `obs-plugins\64bit` dan tambahkan namanya ke `isDeniedModule()` di `src/core/ObsEngine.cpp`. |
 | Aplikasi berhenti saat start | Buka `%APPDATA%\LiveStudio\logs\*.log`; biasanya `obs-plugins`/`data` tidak ikut tersalin. Jalankan `--selftest`. |
 | Kamera tidak muncul | Pastikan `win-dshow.dll` ada di `obs-plugins\64bit` dan privasi kamera Windows mengizinkan aplikasi desktop. |
 | Galat kompilasi karena API libobs | Catat versi OBS dan baris galat; API berbeda antarversi mayor. |

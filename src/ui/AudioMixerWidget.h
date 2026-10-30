@@ -70,6 +70,7 @@ public:
 
 private:
 	QVBoxLayout *stripsLayout_;
+	QLabel *hint_ = nullptr; // petunjuk saat belum ada sumber audio
 	std::vector<AudioStrip *> strips_;
 	QTimer *timer_;
 };

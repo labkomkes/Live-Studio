@@ -179,6 +179,11 @@ AudioMixerWidget::AudioMixerWidget(QWidget *parent) : QWidget(parent)
 	stripsLayout_ = new QVBoxLayout(inner);
 	stripsLayout_->setContentsMargins(0, 0, 0, 0);
 	stripsLayout_->addStretch(1);
+	hint_ = new QLabel("Belum ada sumber audio.\nTambahkan Mikrofon atau Audio Desktop lewat tombol ＋ Sumber.", inner);
+	hint_->setAlignment(Qt::AlignCenter);
+	hint_->setWordWrap(true);
+	hint_->setStyleSheet("color:#8a8a8a; padding:12px;");
+	stripsLayout_->insertWidget(0, hint_);
 	scroll->setWidget(inner);
 	outer->addWidget(scroll);
 
@@ -247,6 +252,7 @@ void AudioMixerWidget::refresh()
 		stripsLayout_->insertWidget(int(strips_.size()), strip);
 		strips_.push_back(strip);
 	}
+	hint_->setVisible(strips_.empty());
 }
 
 } // namespace ls

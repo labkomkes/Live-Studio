@@ -10,16 +10,25 @@ Lingkungan: Linux x86_64, Qt 6.4.2, libobs 30.0.2 (paket Ubuntu), Xvfb (tanpa GP
 |---|---|
 | Kompilasi seluruh kode (`livestudio_core`, `LiveStudio`, `LiveStudioSmoke`) | Berhasil, tanpa galat |
 | `LiveStudio --selftest` | 21 PASS, 0 FAIL; 10 WARN (sumber khusus Windows dan perangkat tidak ada, wajar di Linux) |
-| `LiveStudioSmoke` (GUI nyata, 17 pemeriksaan) | 17 PASS: awal Program/Preview, **CUT**, **TAKE**, buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
+| `LiveStudioSmoke` (GUI nyata, 24 pemeriksaan) | 24 PASS: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
 
 Artinya logika inti (engine libobs, scene, transisi, teks/video/gambar/warna, mixer, lower third,
 bumper, alur shutdown) berjalan pada libobs sungguhan.
 
+## Hasil nyata di Windows (dilaporkan pengguna)
+
+- Build OBS 32.2.2, build Live Studio (MSVC), windeployqt, dan installer berhasil dibuat lewat GitHub Actions.
+- Menjalankan installer hasil build pertama gagal start: `avcodec-62.dll`, `avformat-62.dll`, `avutil-60.dll`, `swscale-9.dll` tidak ditemukan. Diperbaiki di `package-windows.ps1` (0.3.1-r5); perbaikan ini belum diverifikasi di Windows.
+
+- Galat kedua di Windows: `obs-vst.dll` -> *Entry Point Not Found* (`QObjectData::dynamicMetaObject`): plugin itu dibangun terhadap Qt bawaan obs-deps, berbeda dari Qt 6.8.3 aplikasi. Perbaikan (0.3.1-r6): plugin Qt/frontend OBS (`obs-vst`, `decklink-captions`, `decklink-output-ui`, `aja-output-ui`) tidak dipasang dan ditolak saat memuat modul; Windows tidak lagi menampilkan dialog modal bila sebuah plugin gagal dimuat. Belum diverifikasi di Windows.
+- Tampilan baru (OBS di atas, deck vMix di bawah) diuji hanya di Linux/Xvfb (render OpenGL, tangkapan layar diperiksa manual). Tampilan di Windows (Direct3D 11, font GDI+, DPI) belum pernah dilihat.
+
 ## BELUM diuji (jangan dianggap berfungsi)
 
-- **Semua yang khusus Windows**: kompilasi dengan MSVC, `build-obs.ps1`, `build-livestudio.ps1`,
-  `package-windows.ps1`, workflow GitHub Actions, dan skrip Inno Setup `.iss`. Tidak ada Windows
-  di lingkungan pengembangan, jadi **installer `.exe` belum pernah dibuat maupun dijalankan**.
+- **Verifikasi di Windows**: installer sudah berhasil dibuat lewat GitHub Actions, tetapi baru satu kali
+  dijalankan dan langsung gagal start (DLL FFmpeg hilang, lihat di atas). Setelah perbaikan, belum ada
+  laporan bahwa aplikasi benar-benar terbuka, bahwa `--selftest` lulus di Windows, atau bahwa
+  uninstall bersih.
 - Sumber Windows: kamera/webcam (`dshow_input`), capture monitor dan jendela, audio WASAPI
   (mikrofon dan audio desktop). Kodenya ada, tetapi tidak pernah dijalankan dengan perangkat nyata.
 - Tampilan visual sebenarnya (render GPU Direct3D 11), kualitas gambar, sinkron audio-video.
