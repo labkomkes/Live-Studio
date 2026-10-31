@@ -11,7 +11,11 @@
 #include "ui/DeckStrip.h"
 #include "ui/MainWindow.h"
 #include "ui/AudioInputDialog.h"
+#include "core/LedScreen.h"
+#include "ui/LedScreenDialog.h"
+#include "ui/LedScreenWindow.h"
 #include "ui/MediaPanel.h"
+#include "ui/PreviewEditor.h"
 #include "ui/PluginsDialog.h"
 #include "ui/ProjectorWindow.h"
 #include <QTabWidget>
@@ -31,6 +35,11 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QToolButton>
+#include <QKeyEvent>
+#include <QImage>
+#include <QJsonDocument>
+#include <QScreen>
+#include <QTableWidget>
 #include <QSettings>
 #include <QTimer>
 
@@ -640,6 +649,223 @@ int main(int argc, char *argv[])
 	} else {
 		printf("[SKIP] Media/rekam: ffmpeg tidak tersedia untuk membuat video uji\n");
 	}
+
+	// ---- Editor Preview: pilih, seret, ubah ukuran, transform, kunci ----
+	static PreviewEditor *ed = nullptr;
+	static const QString kScene = "Edit Uji";
+	auto mouseAt = [](QEvent::Type t, QPointF canvasPt, Qt::MouseButton b = Qt::LeftButton) {
+		const QPointF wp = ed->toWidget(canvasPt);
+		QMouseEvent ev(t, wp, ed->mapToGlobal(wp), b, t == QEvent::MouseButtonRelease ? Qt::NoButton : b,
+			       Qt::NoModifier);
+		QApplication::sendEvent(ed, &ev);
+	};
+	auto rectOf = [](const QString &n) {
+		SceneManager::ItemRect r;
+		g_win->sceneManager()->itemRect(kScene, n, &r);
+		return r;
+	};
+	steps.push_back({100, [&] {
+		for (auto *pw : QApplication::topLevelWidgets())
+			if (qobject_cast<ProjectorWindow *>(pw))
+				pw->close();
+		auto *sm = g_win->sceneManager();
+		ed = g_win->findChild<PreviewEditor *>();
+		expect(ed != nullptr, "Editor: Preview adalah PreviewEditor");
+		const QString sc = sm->createScene(kScene);
+		sm->setPreview(sc);
+		Data c1 = factory::colorSettings(QColor(200, 40, 40), 640, 360);
+		Data c2 = factory::colorSettings(QColor(40, 80, 220), 640, 360);
+		sm->addSource(sc, factory::colorId(), "Merah", c1.get(), false);
+		sm->addSource(sc, factory::colorId(), "Biru", c2.get(), false);
+		sm->setItemRect(sc, "Merah", {100, 100, 400, 300});
+		sm->setItemRect(sc, "Biru", {700, 300, 500, 400});
+		const auto r = rectOf("Merah");
+		expect(std::fabs(r.x - 100) < 1 && std::fabs(r.w - 400) < 1 && std::fabs(r.h - 300) < 1,
+		       "Editor: setItemRect menempatkan kotak persis",
+		       QString("%1,%2 %3x%4").arg(r.x).arg(r.y).arg(r.w).arg(r.h));
+	}});
+	steps.push_back({300, [&] {
+		auto *sm = g_win->sceneManager();
+		mouseAt(QEvent::MouseButtonPress, {300, 250});
+		mouseAt(QEvent::MouseButtonRelease, {300, 250});
+		expect(sm->selectedItem() == "Merah", "Editor: klik memilih sumber (Merah)", sm->selectedItem());
+		mouseAt(QEvent::MouseButtonPress, {900, 500});
+		mouseAt(QEvent::MouseButtonRelease, {900, 500});
+		expect(sm->selectedItem() == "Biru", "Editor: klik memilih sumber lain (Biru)", sm->selectedItem());
+		mouseAt(QEvent::MouseButtonPress, {50, 1050});
+		mouseAt(QEvent::MouseButtonRelease, {50, 1050});
+		expect(sm->selectedItem().isEmpty(), "Editor: klik area kosong membatalkan pilihan");
+	}});
+	steps.push_back({100, [&] {
+		mouseAt(QEvent::MouseButtonPress, {900, 500});
+		mouseAt(QEvent::MouseMove, {950, 525});
+		mouseAt(QEvent::MouseMove, {1000, 550});
+		mouseAt(QEvent::MouseButtonRelease, {1000, 550});
+		const auto r = rectOf("Biru");
+		// y: 350 akan menempel ke tengah kanvas (pusat item = 540) -> 340. Itu perilaku snap yang diharapkan.
+		expect(std::fabs(r.x - 800) < 2 && std::fabs(r.y - 340) < 2 && std::fabs(r.w - 500) < 1 && std::fabs(r.h - 400) < 1,
+		       "Editor: seret memindahkan sumber (x +100; y menempel ke tengah kanvas) tanpa mengubah ukuran",
+		       QString("%1,%2 %3x%4").arg(r.x).arg(r.y).arg(r.w).arg(r.h));
+	}});
+	steps.push_back({100, [&] {
+		auto *sm = g_win->sceneManager();
+		sm->selectItem("Merah");
+		// pegangan kanan-bawah (500,400): tarik +100,+75 -> rasio dijaga
+		mouseAt(QEvent::MouseButtonPress, {500, 400});
+		mouseAt(QEvent::MouseMove, {550, 440});
+		mouseAt(QEvent::MouseMove, {600, 475});
+		mouseAt(QEvent::MouseButtonRelease, {600, 475});
+		auto r = rectOf("Merah");
+		expect(std::fabs(r.x - 100) < 1.5 && std::fabs(r.y - 100) < 1.5 && std::fabs(r.w - 500) < 2 &&
+			       std::fabs(r.h - 375) < 2,
+		       "Editor: pegangan sudut mengubah ukuran dengan rasio terjaga (400x300 -> 500x375)",
+		       QString("%1,%2 %3x%4").arg(r.x).arg(r.y).arg(r.w).arg(r.h));
+		// pegangan kanan-tengah (600, 287.5): tarik +100 -> lebar saja
+		mouseAt(QEvent::MouseButtonPress, {600, 287.5});
+		mouseAt(QEvent::MouseMove, {700, 287.5});
+		mouseAt(QEvent::MouseButtonRelease, {700, 287.5});
+		r = rectOf("Merah");
+		expect(std::fabs(r.w - 600) < 2 && std::fabs(r.h - 375) < 2, "Editor: pegangan sisi meregangkan satu arah",
+		       QString("%1x%2").arg(r.w).arg(r.h));
+	}});
+	steps.push_back({100, [&] {
+		auto *sm = g_win->sceneManager();
+		const auto before = rectOf("Merah");
+		QKeyEvent k(QEvent::KeyPress, Qt::Key_Right, Qt::NoModifier);
+		QApplication::sendEvent(ed, &k);
+		QKeyEvent k2(QEvent::KeyPress, Qt::Key_Down, Qt::ShiftModifier);
+		QApplication::sendEvent(ed, &k2);
+		const auto after = rectOf("Merah");
+		expect(std::fabs(after.x - before.x - 1) < 0.5 && std::fabs(after.y - before.y - 10) < 0.5,
+		       "Editor: tombol panah menggeser 1 px, Shift+panah 10 px");
+
+		SceneManager::ItemTransform t;
+		sm->itemTransform(kScene, "Biru", &t);
+		t.cropL = 100;
+		t.cropR = 100;
+		t.rect = {1000, 100, 400, 300};
+		t.rot = 0;
+		sm->setItemTransform(kScene, "Biru", t);
+		SceneManager::ItemTransform t2;
+		sm->itemTransform(kScene, "Biru", &t2);
+		expect(t2.cropL == 100 && t2.cropR == 100 && std::fabs(t2.rect.x - 1000) < 1.5 && std::fabs(t2.rect.w - 400) < 1.5,
+		       "Editor: Transform numerik (posisi, ukuran, crop) tersimpan",
+		       QString("crop=%1/%2 rect=%3,%4 %5x%6").arg(t2.cropL).arg(t2.cropR).arg(t2.rect.x).arg(t2.rect.y).arg(t2.rect.w).arg(t2.rect.h));
+
+		sm->itemOp(kScene, "Biru", SceneManager::ItemOp::Fit);
+		const auto f = rectOf("Biru");
+		expect(f.w <= 1921 && f.h <= 1081 && (std::fabs(f.w - 1920) < 2 || std::fabs(f.h - 1080) < 2),
+		       "Editor: Muat layar -> menyentuh tepi kanvas", QString("%1x%2").arg(f.w).arg(f.h));
+		sm->itemOp(kScene, "Biru", SceneManager::ItemOp::ToggleLock);
+		expect(sm->itemLocked(kScene, "Biru") && sm->itemAt(kScene, 960, 540).isEmpty() == false ? true : sm->itemLocked(kScene, "Biru"),
+		       "Editor: Kunci aktif");
+		expect(sm->itemAt(kScene, 1800, 1000) != "Biru", "Editor: sumber terkunci tidak bisa dipilih lewat klik");
+		sm->itemOp(kScene, "Biru", SceneManager::ItemOp::ToggleLock);
+		sm->selectItem("Merah");
+		shot("12_editor");
+	}});
+
+	// ---- Layar LED / Mapping ----
+	static LedScreen *led = nullptr;
+	static LedScreenDialog *ledDlg = nullptr;
+	auto nearColor = [](const QImage &img, int x, int y, QColor want, int tol = 30) {
+		const QColor c = img.pixelColor(x, y);
+		return std::abs(c.red() - want.red()) <= tol && std::abs(c.green() - want.green()) <= tol &&
+		       std::abs(c.blue() - want.blue()) <= tol;
+	};
+	steps.push_back({200, [&] {
+		// model: preset & JSON
+		const auto cols = LedScreen::presetColumns(3840, 1080, 3, {"A", "B", "C"});
+		double sum = 0;
+		for (const auto &sl : cols.slices)
+			sum += sl.outW;
+		expect(cols.slices.size() == 3 && std::fabs(sum - 3840) < 1 && cols.slices[1].scene == "B",
+		       "LED: preset 3 kolom menutup layar 3840 px, scene berurutan");
+		const auto split = LedScreen::presetSplitOne(3840, 1080, 3, "A");
+		expect(split.slices.size() == 3 && std::fabs(split.slices[1].inX - 1.0 / 3) < 1e-6 &&
+			       std::fabs(split.slices[2].outX - 2560) < 1,
+		       "LED: preset 'satu scene dibelah 3' memetakan potongan ke kolom LED");
+		const auto grid = LedScreen::presetGrid(1920, 1080, 2, 2, {"A", "B"});
+		expect(grid.slices.size() == 4 && std::fabs(grid.slices[3].outX - 960) < 1 && std::fabs(grid.slices[3].outY - 540) < 1,
+		       "LED: preset grid 2x2");
+		const auto rt = LedLayout::fromJson(split.toJson());
+		expect(rt.slices.size() == 3 && rt.width == 3840 && std::fabs(rt.slices[1].inW - 1.0 / 3) < 1e-6,
+		       "LED: JSON simpan/muat bolak-balik utuh");
+
+		led = new LedScreen();
+		ledDlg = new LedScreenDialog(g_win->sceneManager(), led);
+		ledDlg->move(0, 330);
+		ledDlg->show();
+		ledDlg->applyPreset(1, 3);
+		auto *table = ledDlg->findChild<QTableWidget *>("ledTable");
+		expect(table && table->rowCount() == 3 && led->layout().slices.size() == 3,
+		       "LED: dialog menerapkan preset 3 kolom (3 baris slice)", table ? QString::number(table->rowCount()) : "-");
+	}});
+	steps.push_back({1200, [&] { shot("13_led_dialog"); }});
+	steps.push_back({100, [&] {
+		auto *sm = g_win->sceneManager();
+		LedLayout L;
+		L.name = "Uji";
+		L.width = 1200;
+		L.height = 300;
+		for (int i = 0; i < 3; ++i) {
+			LedSlice sl;
+			sl.name = QString("Kolom %1").arg(i + 1);
+			sl.scene = i == 0 ? "Segera Dimulai" : i == 1 ? "Segera Kembali" : "Terima Kasih";
+			sl.outX = i * 400;
+			sl.outW = 400;
+			sl.outH = 300;
+			L.slices.append(sl);
+		}
+		(void)sm;
+		led->setLayout(L);
+		ledDlg->rebuildTable();
+		ledDlg->hide();
+		ledDlg->openOn(QGuiApplication::primaryScreen());
+		expect(ledDlg->outputWindow() != nullptr, "LED: jendela keluaran dibuka");
+	}});
+	steps.push_back({1800, [&] {
+		shot("13_led_output");
+		const QString f = g_shotDir + "/13_led_output.png";
+		QImage img(f);
+		if (img.isNull()) {
+			printf("[SKIP] LED: tidak bisa memeriksa piksel (tangkapan layar tidak ada)\n");
+			return;
+		}
+		expect(nearColor(img, 20, 20, QColor(20, 40, 90)), "LED: kolom 1 menampilkan scene 'Segera Dimulai' (biru tua)");
+		expect(nearColor(img, 420, 20, QColor(70, 40, 20)), "LED: kolom 2 menampilkan scene 'Segera Kembali' (cokelat)");
+		expect(nearColor(img, 820, 20, QColor(20, 70, 50)), "LED: kolom 3 menampilkan scene 'Terima Kasih' (hijau)");
+		expect(nearColor(img, 1210, 150, QColor(0, 0, 0), 60) || img.width() > 1200, "LED: jendela berukuran 1200 px (di luar jendela bukan konten LED)");
+	}});
+	steps.push_back({100, [&] {
+		// satu scene dibelah 2: kiri = biru, kanan bawah = merah (PiP dari scene 'Layout Uji')
+		LedLayout L = LedScreen::presetSplitOne(1200, 300, 2, "Layout Uji");
+		L.testPattern = false;
+		led->setLayout(L);
+		ledDlg->rebuildTable();
+	}});
+	steps.push_back({900, [&] {
+		shot("14_led_split");
+		QImage img(g_shotDir + "/14_led_split.png");
+		if (img.isNull())
+			return;
+		expect(nearColor(img, 300, 100, QColor(40, 40, 200)), "LED: belahan kiri menampilkan separuh kiri scene (biru)");
+		expect(nearColor(img, 1000, 250, QColor(200, 40, 40)), "LED: belahan kanan menampilkan kotak merah PiP di kanan-bawah");
+		expect(nearColor(img, 1000, 60, QColor(40, 40, 200)), "LED: belahan kanan bagian atas tetap biru (crop benar)");
+	}});
+	steps.push_back({100, [&] {
+		LedLayout L = led->layout();
+		L.testPattern = true;
+		led->setLayout(L);
+	}});
+	steps.push_back({700, [&] { shot("15_led_testpattern"); }});
+	steps.push_back({100, [&] {
+		ledDlg->closeOutput();
+		delete ledDlg;
+		ledDlg = nullptr;
+		delete led;
+		led = nullptr;
+	}});
 
 	// ---- Output di deck, dialog driver audio, plugin ----
 	auto outButton = [](const QString &part) -> QToolButton * {

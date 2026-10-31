@@ -118,3 +118,13 @@ QStatusBar::item { border: none; }
 #fader::groove:vertical { width:6px; background:#3a3a3a; border-radius:3px; }
 #fader::add-page:vertical { background:#3b82f6; border-radius:3px; }
 #fader::handle:vertical { height:16px; margin:0 -6px; background:#f0f0f0; border-radius:3px; }
+
+/* --- Tabel, header, spinbox, combo (dialog Layar LED dan lainnya) --- */
+QTableWidget { background:#1e1e1e; alternate-background-color:#232323; gridline-color:#333; color:#dcdcdc; border:1px solid #3a3a3a; }
+QHeaderView::section { background:#2f2f2f; color:#cfcfcf; padding:4px 6px; border:0; border-right:1px solid #3a3a3a; border-bottom:1px solid #3a3a3a; font-weight:600; }
+QTableWidget QDoubleSpinBox, QTableWidget QLineEdit, QTableWidget QComboBox { background:#262626; color:#e6e6e6; border:1px solid #3d3d3d; border-radius:2px; padding:1px 4px; }
+QTableWidget QCheckBox { margin-left:10px; }
+QDialog { background:#232323; }
+QComboBox { background:#2c2c2c; border:1px solid #444; border-radius:3px; padding:3px 8px; }
+QComboBox QAbstractItemView { background:#2c2c2c; color:#e0e0e0; selection-background-color:#3d6db3; }
+QSpinBox, QDoubleSpinBox, QLineEdit { background:#2a2a2a; border:1px solid #444; border-radius:3px; padding:3px 6px; color:#e6e6e6; }

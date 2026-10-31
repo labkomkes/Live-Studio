@@ -1,5 +1,6 @@
 #include "Render.h"
 
+#include "../core/LedScreen.h"
 #include "../core/ObsEngine.h"
 #include "../core/Raii.h"
 #include "../core/SceneManager.h"
@@ -311,6 +312,137 @@ void drawDeck(SceneManager *sm, uint32_t cx, uint32_t cy, const DeckView &v)
 		// Bingkai tile: tebal untuk Program/Preview.
 		drawOutline(px(t.all.x) - 1.f, px(t.all.y) - 1.f, px(t.all.w) + 2.f, px(t.all.h) + 2.f,
 			    hot && !isProg && !isPrev ? 0xFF9A9A9A : accent, isProg || isPrev ? 3 : 1);
+	}
+}
+
+void drawPreviewEditor(SceneManager *sm, uint32_t cx, uint32_t cy, const EditorView &v)
+{
+	SourceRef src = sm->previewSourceRef();
+	float bw, bh;
+	canvasSize(bw, bh);
+	drawSourceInto(src.get(), bw, bh, 0.f, 0.f, float(cx), float(cy));
+	if (bw <= 0.f || bh <= 0.f)
+		return;
+	const float scale = std::min(float(cx) / bw, float(cy) / bh);
+	const float ox = (float(cx) - bw * scale) / 2.f, oy = (float(cy) - bh * scale) / 2.f;
+
+	gs_viewport_push();
+	gs_projection_push();
+	gs_ortho(0.f, float(cx), 0.f, float(cy), -100.f, 100.f);
+	gs_set_viewport(0, 0, int(cx), int(cy));
+
+	// batas kanvas
+	drawOutline(ox, oy, bw * scale, bh * scale, 0x66FFFFFF, 1);
+
+	if (v.snapX)
+		fillRect(ox + v.snapXPos * scale, oy, 1.f, bh * scale, 0xFFFFD84A);
+	if (v.snapY)
+		fillRect(ox, oy + v.snapYPos * scale, bw * scale, 1.f, 0xFFFFD84A);
+
+	if (v.hasSel) {
+		const float x = ox + v.x * scale, y = oy + v.y * scale, w = v.w * scale, h = v.h * scale;
+		drawOutline(x, y, w, h, 0xFF3B3BFF, 2);
+		const float hx[8] = {x, x + w / 2, x + w, x + w, x + w, x + w / 2, x, x};
+		const float hy[8] = {y, y, y, y + h / 2, y + h, y + h, y + h, y + h / 2};
+		for (int i = 0; i < 8; ++i) {
+			const float s = (i == v.hoverHandle) ? 11.f : 9.f;
+			fillRect(hx[i] - s / 2, hy[i] - s / 2, s, s, i == v.hoverHandle ? 0xFF3B3BFF : 0xFFFFFFFF);
+			drawOutline(hx[i] - s / 2, hy[i] - s / 2, s, s, 0xFF3B3BFF, 1);
+		}
+	}
+	gs_projection_pop();
+	gs_viewport_pop();
+}
+
+void drawLed(SceneManager *sm, const LedLayout &L, uint32_t cx, uint32_t cy)
+{
+	if (L.width <= 0 || L.height <= 0)
+		return;
+	float bw, bh;
+	canvasSize(bw, bh);
+	const float s = std::min(float(cx) / float(L.width), float(cy) / float(L.height));
+	const float ox = (float(cx) - L.width * s) / 2.f, oy = (float(cy) - L.height * s) / 2.f;
+
+	gs_viewport_push();
+	gs_projection_push();
+	gs_ortho(0.f, float(cx), 0.f, float(cy), -100.f, 100.f);
+	gs_set_viewport(0, 0, int(cx), int(cy));
+	fillRect(ox, oy, L.width * s, L.height * s, 0xFF000000);
+	gs_projection_pop();
+	gs_viewport_pop();
+
+	const QList<SceneManager::SceneCell> cells = sm->scenesForDraw();
+	for (const LedSlice &sl : L.slices) {
+		if (!sl.enabled)
+			continue;
+		SourceRef src;
+		if (sl.scene.isEmpty())
+			src = sm->programSourceRef();
+		else if (sl.scene == "@preview")
+			src = sm->previewSourceRef();
+		else
+			for (const auto &c : cells)
+				if (c.name == sl.scene)
+					src = c.source;
+		if (!src)
+			continue;
+
+		float ix = float(sl.inX) * bw, iy = float(sl.inY) * bh, iw = float(sl.inW) * bw, ih = float(sl.inH) * bh;
+		float dx = ox + float(sl.outX) * s, dy = oy + float(sl.outY) * s;
+		float dw = float(sl.outW) * s, dh = float(sl.outH) * s;
+		if (iw < 1.f || ih < 1.f || dw < 1.f || dh < 1.f)
+			continue;
+		const float inA = iw / ih, outA = dw / dh;
+		if (sl.fit == 1) { // Muat: tampilan penuh, tepi hitam
+			if (inA > outA) {
+				const float nh = dw / inA;
+				dy += (dh - nh) / 2.f;
+				dh = nh;
+			} else {
+				const float nw = dh * inA;
+				dx += (dw - nw) / 2.f;
+				dw = nw;
+			}
+		} else if (sl.fit == 2) { // Isi: potong sumber agar menutup penuh
+			if (inA > outA) {
+				const float nw = ih * outA;
+				ix += (iw - nw) / 2.f;
+				iw = nw;
+			} else {
+				const float nh = iw / outA;
+				iy += (ih - nh) / 2.f;
+				ih = nh;
+			}
+		}
+		gs_viewport_push();
+		gs_projection_push();
+		gs_ortho(ix, ix + iw, iy, iy + ih, -100.f, 100.f);
+		gs_set_viewport(int(std::lround(dx)), int(std::lround(dy)), int(std::lround(dw)), int(std::lround(dh)));
+		// Tanpa scissor: geometri di luar area ortho terpotong oleh clip-space ke dalam viewport.
+		obs_source_video_render(src.get());
+		gs_projection_pop();
+		gs_viewport_pop();
+	}
+
+	// Pola uji: batas slice + nama + ukuran piksel (kalibrasi layar LED)
+	if (L.testPattern) {
+		gs_viewport_push();
+		gs_projection_push();
+		gs_ortho(0.f, float(cx), 0.f, float(cy), -100.f, 100.f);
+		gs_set_viewport(0, 0, int(cx), int(cy));
+		drawOutline(ox, oy, L.width * s, L.height * s, 0xFF00FFFF, 3);
+		for (const LedSlice &sl : L.slices) {
+			const float dx = ox + float(sl.outX) * s, dy = oy + float(sl.outY) * s;
+			const float dw = float(sl.outW) * s, dh = float(sl.outH) * s;
+			drawOutline(dx, dy, dw, dh, 0xFF40FF40, 2);
+			fillRect(dx, dy + dh / 2.f, dw, 1.f, 0x8040FF40);
+			fillRect(dx + dw / 2.f, dy, 1.f, dh, 0x8040FF40);
+			const std::string t = sl.name.toStdString() + "  " + std::to_string(int(sl.outW)) + "x" +
+					      std::to_string(int(sl.outH));
+			drawTextIn(t, dx + 6.f, dy + 6.f, std::max(10.f, dw - 12.f), std::max(10.f, std::min(dh * 0.2f, 40.f)), false, 0.8f);
+		}
+		gs_projection_pop();
+		gs_viewport_pop();
 	}
 }
 

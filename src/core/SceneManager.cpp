@@ -7,6 +7,8 @@
 #include <QFileInfo>
 
 #include <obs.h>
+#include <graphics/matrix4.h>
+#include <graphics/vec3.h>
 
 #include <algorithm>
 
@@ -374,6 +376,8 @@ void SceneManager::setPreview(const QString &name)
 	obs_source_inc_showing(ns.get());
 	if (old)
 		obs_source_dec_showing(old.get());
+	selected_.clear();
+	emit selectionChanged(QString());
 	emit previewChanged(name);
 }
 
@@ -498,6 +502,7 @@ static bool enumItemsCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	info.name = name;
 	info.typeId = QString::fromUtf8(obs_source_get_id(src));
 	info.visible = obs_sceneitem_visible(item);
+	info.locked = obs_sceneitem_locked(item);
 	ctx->out->prepend(info); // urutan atas -> bawah
 	return true;
 }
@@ -824,6 +829,271 @@ bool SceneManager::applyLayout(const QString &scene, const QString &layout)
 	}
 	emit itemsChanged(scene);
 	return true;
+}
+
+
+// ---------------------------------------------------------------- edit bebas
+
+static obs_sceneitem_t *findItem(const SourceRef &sc, const QString &name)
+{
+	return sc ? obs_scene_find_source(obs_scene_from_source(sc.get()), name.toUtf8().constData()) : nullptr;
+}
+
+static bool boxRect(obs_sceneitem_t *item, SceneManager::ItemRect *r)
+{
+	matrix4 m;
+	obs_sceneitem_get_box_transform(item, &m);
+	const float px[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+	float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+	for (auto &p : px) {
+		vec3 in, out;
+		vec3_set(&in, p[0], p[1], 0.f);
+		vec3_transform(&out, &in, &m);
+		x0 = std::min(x0, out.x);
+		y0 = std::min(y0, out.y);
+		x1 = std::max(x1, out.x);
+		y1 = std::max(y1, out.y);
+	}
+	r->x = x0;
+	r->y = y0;
+	r->w = x1 - x0;
+	r->h = y1 - y0;
+	return r->w > 0 && r->h > 0;
+}
+
+bool SceneManager::itemRect(const QString &scene, const QString &name, ItemRect *out) const
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	return it && boxRect(it, out);
+}
+
+bool SceneManager::setItemRect(const QString &scene, const QString &name, const ItemRect &r)
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	if (!it || r.w < 1.f || r.h < 1.f)
+		return false;
+	obs_sceneitem_set_rot(it, 0.f);
+	obs_sceneitem_set_alignment(it, kAlignLeft | kAlignTop);
+	obs_sceneitem_set_bounds_type(it, OBS_BOUNDS_STRETCH);
+	obs_sceneitem_set_bounds_alignment(it, kAlignCenter);
+	vec2 b = {r.w, r.h}, pos = {r.x, r.y};
+	obs_sceneitem_set_bounds(it, &b);
+	obs_sceneitem_set_pos(it, &pos);
+	return true;
+}
+
+bool SceneManager::moveItemBy(const QString &scene, const QString &name, float dx, float dy)
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	if (!it)
+		return false;
+	vec2 pos;
+	obs_sceneitem_get_pos(it, &pos);
+	pos.x += dx;
+	pos.y += dy;
+	obs_sceneitem_set_pos(it, &pos);
+	return true;
+}
+
+namespace {
+struct HitCtx {
+	float x, y;
+	obs_sceneitem_t *hit = nullptr;
+};
+bool hitCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	auto *c = static_cast<HitCtx *>(param);
+	const char *n = obs_source_get_name(obs_sceneitem_get_source(item));
+	if (n && QString::fromUtf8(n).startsWith("LS "))
+		return true;
+	if (!obs_sceneitem_visible(item) || obs_sceneitem_locked(item))
+		return true;
+	if (!(obs_source_get_output_flags(obs_sceneitem_get_source(item)) & OBS_SOURCE_VIDEO))
+		return true;
+	SceneManager::ItemRect r;
+	if (boxRect(item, &r) && c->x >= r.x && c->x <= r.x + r.w && c->y >= r.y && c->y <= r.y + r.h)
+		c->hit = item; // enumerasi bawah -> atas; yang terakhir cocok = paling atas
+	return true;
+}
+} // namespace
+
+QString SceneManager::itemAt(const QString &scene, float cx, float cy) const
+{
+	SourceRef sc = findScene(scene);
+	if (!sc)
+		return {};
+	HitCtx c{cx, cy};
+	obs_scene_enum_items(obs_scene_from_source(sc.get()), hitCb, &c);
+	return c.hit ? QString::fromUtf8(obs_source_get_name(obs_sceneitem_get_source(c.hit))) : QString();
+}
+
+bool SceneManager::itemLocked(const QString &scene, const QString &name) const
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	return it && obs_sceneitem_locked(it);
+}
+
+bool SceneManager::itemOp(const QString &scene, const QString &name, ItemOp op)
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	if (!it)
+		return false;
+	obs_video_info ovi = {};
+	obs_get_video_info(&ovi);
+	const float W = float(ovi.base_width), H = float(ovi.base_height);
+	auto place = [&](obs_bounds_type bt) {
+		obs_sceneitem_set_rot(it, 0.f);
+		obs_sceneitem_set_alignment(it, kAlignCenter);
+		vec2 pos = {W / 2.f, H / 2.f}, b = {W, H};
+		obs_sceneitem_set_pos(it, &pos);
+		obs_sceneitem_set_bounds_type(it, bt);
+		obs_sceneitem_set_bounds_alignment(it, kAlignCenter);
+		obs_sceneitem_set_bounds(it, &b);
+	};
+	switch (op) {
+	case ItemOp::Fit:
+		place(OBS_BOUNDS_SCALE_INNER);
+		break;
+	case ItemOp::Fill:
+		place(OBS_BOUNDS_SCALE_OUTER);
+		break;
+	case ItemOp::Center: {
+		ItemRect r;
+		if (boxRect(it, &r))
+			moveItemBy(scene, name, W / 2.f - (r.x + r.w / 2.f), H / 2.f - (r.y + r.h / 2.f));
+		break;
+	}
+	case ItemOp::Reset: { // ukuran asli 1:1, di tengah
+		obs_sceneitem_set_rot(it, 0.f);
+		obs_sceneitem_set_bounds_type(it, OBS_BOUNDS_NONE);
+		obs_sceneitem_set_alignment(it, kAlignCenter);
+		vec2 sc1 = {1.f, 1.f}, pos = {W / 2.f, H / 2.f};
+		obs_sceneitem_set_scale(it, &sc1);
+		obs_sceneitem_set_pos(it, &pos);
+		break;
+	}
+	case ItemOp::Rotate90: {
+		ItemRect r;
+		if (!boxRect(it, &r))
+			break;
+		// putar mengelilingi titik tengah kotak
+		const float cxp = r.x + r.w / 2.f, cyp = r.y + r.h / 2.f;
+		obs_bounds_type bt = obs_sceneitem_get_bounds_type(it);
+		if (bt == OBS_BOUNDS_NONE) {
+			obs_sceneitem_set_alignment(it, kAlignCenter);
+			vec2 pos = {cxp, cyp};
+			obs_sceneitem_set_pos(it, &pos);
+		} else {
+			obs_sceneitem_set_alignment(it, kAlignCenter);
+			vec2 pos = {cxp, cyp};
+			obs_sceneitem_set_pos(it, &pos);
+		}
+		float rot = obs_sceneitem_get_rot(it) + 90.f;
+		if (rot >= 360.f)
+			rot -= 360.f;
+		obs_sceneitem_set_rot(it, rot);
+		break;
+	}
+	case ItemOp::ToggleLock:
+		obs_sceneitem_set_locked(it, !obs_sceneitem_locked(it));
+		break;
+	case ItemOp::ToFront:
+		obs_sceneitem_set_order(it, OBS_ORDER_MOVE_TOP);
+		ensureOverlayOnTop(scene);
+		break;
+	case ItemOp::ToBack:
+		obs_sceneitem_set_order(it, OBS_ORDER_MOVE_BOTTOM);
+		break;
+	}
+	emit itemsChanged(scene);
+	return true;
+}
+
+bool SceneManager::itemTransform(const QString &scene, const QString &name, ItemTransform *out) const
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	if (!it || !boxRect(it, &out->rect))
+		return false;
+	out->rot = obs_sceneitem_get_rot(it);
+	obs_sceneitem_crop c;
+	obs_sceneitem_get_crop(it, &c);
+	out->cropL = c.left;
+	out->cropT = c.top;
+	out->cropR = c.right;
+	out->cropB = c.bottom;
+	return true;
+}
+
+bool SceneManager::setItemTransform(const QString &scene, const QString &name, const ItemTransform &t)
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, name);
+	if (!it)
+		return false;
+	obs_sceneitem_crop c = {t.cropL, t.cropT, t.cropR, t.cropB};
+	obs_sceneitem_set_crop(it, &c);
+	// Tempatkan kotak (sudah memperhitungkan crop karena bounds mengatur ukuran akhir).
+	obs_sceneitem_set_alignment(it, kAlignCenter);
+	obs_sceneitem_set_bounds_type(it, OBS_BOUNDS_STRETCH);
+	obs_sceneitem_set_bounds_alignment(it, kAlignCenter);
+	vec2 b = {std::max(1.f, t.rect.w), std::max(1.f, t.rect.h)};
+	vec2 pos = {t.rect.x + t.rect.w / 2.f, t.rect.y + t.rect.h / 2.f};
+	obs_sceneitem_set_bounds(it, &b);
+	obs_sceneitem_set_pos(it, &pos);
+	obs_sceneitem_set_rot(it, t.rot);
+	return true;
+}
+
+bool SceneManager::renameSource(const QString &scene, const QString &oldName, const QString &newName)
+{
+	SourceRef sc = findScene(scene);
+	obs_sceneitem_t *it = findItem(sc, oldName);
+	const QString n = newName.trimmed();
+	if (!it || n.isEmpty() || n.startsWith("LS "))
+		return false;
+	if (n == oldName)
+		return true;
+	obs_source_t *exists = obs_get_source_by_name(n.toUtf8().constData());
+	if (exists) {
+		obs_source_release(exists);
+		return false;
+	}
+	obs_source_set_name(obs_sceneitem_get_source(it), n.toUtf8().constData());
+	if (selected_ == oldName)
+		selected_ = n;
+	emit itemsChanged(scene);
+	return true;
+}
+
+bool SceneManager::moveScene(const QString &name, bool up)
+{
+	{
+		std::lock_guard<std::mutex> lock(mtx_);
+		int i = -1;
+		for (size_t k = 0; k < scenes_.size(); ++k)
+			if (scenes_[k].first == name)
+				i = int(k);
+		const int j = up ? i - 1 : i + 1;
+		if (i < 0 || j < 0 || j >= int(scenes_.size()))
+			return false;
+		std::swap(scenes_[size_t(i)], scenes_[size_t(j)]);
+	}
+	emit scenesChanged();
+	return true;
+}
+
+void SceneManager::selectItem(const QString &name)
+{
+	if (selected_ == name)
+		return;
+	selected_ = name;
+	emit selectionChanged(name);
 }
 
 } // namespace ls

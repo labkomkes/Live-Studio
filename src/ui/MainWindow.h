@@ -36,6 +36,9 @@ class BumperPanel;
 class ProjectorWindow;
 class DeckStrip;
 class MediaPanel;
+class PreviewEditor;
+class LedScreen;
+class LedScreenDialog;
 class OutputManager;
 
 class MainWindow : public QMainWindow {
@@ -68,6 +71,11 @@ private:
 	void openProjector(int mode, QScreen *screen);
 	void fillScreenMenu(QMenu *menu, int mode);
 	void refreshOutputButtons();
+	LedScreenDialog *ledDialog();
+	void fillLedMenu(QMenu *menu);
+	void showItemMenu(const QString &name, const QPoint &globalPos);
+	void editItemContent(const QString &name);
+	void openTransform(const QString &name);
 	ProjectorWindow *projectorFor(int mode) const;
 	void chooseVideoSettings();
 	void showAbout();
@@ -83,6 +91,7 @@ private:
 	Bumper *bumper_ = nullptr;
 
 	ObsDisplayWidget *preview_ = nullptr;
+	PreviewEditor *previewEditor_ = nullptr;
 	ObsDisplayWidget *program_ = nullptr;
 	DeckStrip *deckStrip_ = nullptr;
 	QLabel *previewLabel_ = nullptr;
@@ -96,6 +105,9 @@ private:
 	QToolButton *programBtn_ = nullptr;
 	QToolButton *previewOutBtn_ = nullptr;
 	QToolButton *multiviewBtn_ = nullptr;
+	QToolButton *ledBtn_ = nullptr;
+	LedScreen *led_ = nullptr;
+	LedScreenDialog *ledDlg_ = nullptr;
 
 	QListWidget *scenesList_ = nullptr;
 	QListWidget *sourcesList_ = nullptr;

@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "../core/Bumper.h"
+#include "../core/LedScreen.h"
 #include "../core/LowerThird.h"
 #include "../core/ObsEngine.h"
 #include "../core/OutputManager.h"
@@ -9,7 +10,11 @@
 #include "AudioMixerWidget.h"
 #include "AudioInputDialog.h"
 #include "AudioSettingsDialog.h"
+#include "LedScreenDialog.h"
+#include "LedScreenWindow.h"
 #include "PluginsDialog.h"
+#include "PreviewEditor.h"
+#include "TransformDialog.h"
 #include "MediaPanel.h"
 #include "OutputDialog.h"
 #include "BumperPanel.h"
@@ -80,6 +85,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 	bumper_ = new Bumper(sm_, this);
 
 	out_ = new OutputManager(this);
+	led_ = new LedScreen(this);
 	buildSourceMenu();
 	buildUi();
 	buildMenus();
@@ -107,6 +113,10 @@ MainWindow::~MainWindow()
 		if (p)
 			delete p.data();
 	projectors_.clear();
+	if (ledDlg_) {
+		delete ledDlg_;
+		ledDlg_ = nullptr;
+	}
 	if (preview_)
 		preview_->destroyDisplay();
 	if (program_)
@@ -210,7 +220,8 @@ void MainWindow::buildUi()
 	root->setContentsMargins(6, 6, 6, 6);
 	root->setSpacing(6);
 
-	auto makeBox = [&](const QString &title, ObsDisplayWidget *&display, QLabel *&label, const QString &obj) {
+	auto makeBox = [&](const QString &title, ObsDisplayWidget *&display, QLabel *&label, const QString &obj,
+			   bool editor = false) {
 		auto *box = new QGroupBox(title, central);
 		box->setObjectName(obj);
 		auto *lay = new QVBoxLayout(box);
@@ -219,14 +230,19 @@ void MainWindow::buildUi()
 		label = new QLabel("-", box);
 		label->setObjectName("monitorName");
 		label->setAlignment(Qt::AlignCenter);
-		display = new ObsDisplayWidget(box);
+		if (editor) {
+			previewEditor_ = new PreviewEditor(sm_, box);
+			display = previewEditor_;
+		} else {
+			display = new ObsDisplayWidget(box);
+		}
 		lay->addWidget(label);
 		lay->addWidget(display, 1);
 		return box;
 	};
 
 	// --- Baris 1 (gaya Studio Mode OBS): Preview | CUT/TAKE | Program ---
-	QGroupBox *previewBox = makeBox("PREVIEW", preview_, previewLabel_, "previewBox");
+	QGroupBox *previewBox = makeBox("PREVIEW", preview_, previewLabel_, "previewBox", true);
 	QGroupBox *programBox = makeBox("PROGRAM", program_, programLabel_, "programBox");
 
 	auto *center = new QVBoxLayout();
@@ -270,7 +286,6 @@ void MainWindow::buildUi()
 	root->addWidget(buildDeck(central), 0);
 
 	setCentralWidget(central);
-	preview_->setDrawFn([this](uint32_t cx, uint32_t cy) { render::drawPreview(sm_, cx, cy); });
 	program_->setDrawFn([this](uint32_t cx, uint32_t cy) { render::drawProgram(sm_, cx, cy); });
 }
 
@@ -316,6 +331,8 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 		auto *add = miniBtn("+", "Adegan baru", w);
 		auto *del = miniBtn("−", "Hapus adegan", w);
 		auto *ren = miniBtn("Nama", "Ganti nama adegan", w);
+		auto *upS = miniBtn("↑", "Pindah adegan ke atas (mengubah urutan tombol 1–9)", w);
+		auto *downS = miniBtn("↓", "Pindah adegan ke bawah", w);
 		auto *tpl = new QToolButton(w);
 		tpl->setObjectName("miniBtn");
 		tpl->setText("Templat ▾");
@@ -337,7 +354,17 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 		btns->addWidget(add);
 		btns->addWidget(del);
 		btns->addWidget(ren);
+		btns->addWidget(upS);
+		btns->addWidget(downS);
 		btns->addWidget(tpl, 1);
+		connect(upS, &QPushButton::clicked, this, [this] {
+			if (auto *it = scenesList_->currentItem())
+				sm_->moveScene(it->data(Qt::UserRole).toString(), true);
+		});
+		connect(downS, &QPushButton::clicked, this, [this] {
+			if (auto *it = scenesList_->currentItem())
+				sm_->moveScene(it->data(Qt::UserRole).toString(), false);
+		});
 		v->addLayout(btns);
 
 		connect(add, &QPushButton::clicked, this, [this] {
@@ -377,6 +404,8 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 		v->setContentsMargins(4, 4, 4, 4);
 		v->setSpacing(4);
 		sourcesList_ = new QListWidget(w);
+		sourcesList_->setContextMenuPolicy(Qt::CustomContextMenu);
+		sourcesList_->setToolTip("Klik = pilih (muncul bingkai di Preview) · klik dua kali = Transform · klik kanan = menu");
 		v->addWidget(sourcesList_, 1);
 
 		auto *btns = new QHBoxLayout();
@@ -432,6 +461,15 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 		connect(sourcesList_, &QListWidget::itemChanged, this, [this](QListWidgetItem *it) {
 			sm_->setItemVisible(editedScene(), it->data(Qt::UserRole).toString(),
 					    it->checkState() == Qt::Checked);
+		});
+		connect(sourcesList_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *cur, QListWidgetItem *) {
+			sm_->selectItem(cur ? cur->data(Qt::UserRole).toString() : QString());
+		});
+		connect(sourcesList_, &QListWidget::itemDoubleClicked, this,
+			[this](QListWidgetItem *it) { openTransform(it->data(Qt::UserRole).toString()); });
+		connect(sourcesList_, &QWidget::customContextMenuRequested, this, [this](const QPoint &p) {
+			if (auto *it = sourcesList_->itemAt(p))
+				showItemMenu(it->data(Qt::UserRole).toString(), sourcesList_->viewport()->mapToGlobal(p));
 		});
 		sourcesPanel_ = makePanel("Sumber", w);
 	}
@@ -567,6 +605,19 @@ QWidget *MainWindow::buildDeck(QWidget *parent)
 	programBtn_ = mkOut("Program ▾", "Tampilkan Program layar penuh di monitor/proyektor pilihan", int(ProjectorWindow::Mode::Program));
 	previewOutBtn_ = mkOut("Preview ▾", "Tampilkan Preview di monitor pilihan", int(ProjectorWindow::Mode::Preview));
 	multiviewBtn_ = mkOut("Multiview ▾", "Tampilkan semua scene (multiview) di monitor pilihan", int(ProjectorWindow::Mode::Multiview));
+	ledBtn_ = new QToolButton(side);
+	ledBtn_->setObjectName("outBtn");
+	ledBtn_->setText("LED ▾");
+	ledBtn_->setToolTip("Layar LED / mapping: bagi layar jadi beberapa slice dan isi per scene");
+	ledBtn_->setPopupMode(QToolButton::InstantPopup);
+	ledBtn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	{
+		auto *m = new QMenu(ledBtn_);
+		connect(m, &QMenu::aboutToShow, this, [this, m] { fillLedMenu(m); });
+		fillLedMenu(m);
+		ledBtn_->setMenu(m);
+	}
+	outs->addWidget(ledBtn_, 1);
 	g->addLayout(outs);
 
 	h->addWidget(side, 0);
@@ -609,6 +660,11 @@ void MainWindow::buildMenus()
 	QMenu *prod = menuBar()->addMenu("&Produksi");
 	prod->addAction("Mulai / Hentikan Rekaman", QKeySequence("Ctrl+R"), this, [this] { toggleRecording(); });
 	prod->addAction("Mulai / Hentikan Siaran", QKeySequence("Ctrl+L"), this, [this] { toggleStreaming(); });
+	prod->addAction("Layar LED / Mapping…", QKeySequence("Ctrl+M"), this, [this] {
+		auto *d = ledDialog();
+		d->show();
+		d->raise();
+	});
 	prod->addSeparator();
 	prod->addAction("Pemutar video: Putar / Jeda", QKeySequence("Ctrl+P"), this, [this] { media_->playPause(); });
 	prod->addAction("Pemutar video: Ulang dari awal", QKeySequence("Ctrl+Shift+P"), this, [this] { media_->restart(); });
@@ -647,6 +703,41 @@ void MainWindow::fillScreenMenu(QMenu *menu, int mode)
 	}
 }
 
+LedScreenDialog *MainWindow::ledDialog()
+{
+	if (!ledDlg_) {
+		ledDlg_ = new LedScreenDialog(sm_, led_, this);
+		connect(ledDlg_, &LedScreenDialog::outputChanged, this, [this] { QTimer::singleShot(0, this, [this] { refreshOutputButtons(); }); });
+	}
+	return ledDlg_;
+}
+
+void MainWindow::fillLedMenu(QMenu *menu)
+{
+	menu->clear();
+	menu->addAction("Atur Layar LED / Mapping…", this, [this] {
+		auto *d = ledDialog();
+		d->show();
+		d->raise();
+		d->activateWindow();
+	});
+	menu->addSeparator();
+	int i = 1;
+	for (QScreen *sc : QGuiApplication::screens()) {
+		const QString label = QString("Buka di Monitor %1 — %2 (%3×%4)").arg(i++).arg(sc->name()).arg(sc->geometry().width()).arg(sc->geometry().height());
+		QPointer<QScreen> g(sc);
+		menu->addAction(label, this, [this, g] {
+			if (g)
+				ledDialog()->openOn(g);
+		});
+	}
+	menu->addAction("Buka di jendela biasa", this, [this] { ledDialog()->openOn(nullptr); });
+	if (ledDlg_ && ledDlg_->outputWindow() && ledDlg_->outputWindow()->isVisible()) {
+		menu->addSeparator();
+		menu->addAction("✕ Tutup keluaran LED", this, [this] { ledDlg_->closeOutput(); });
+	}
+}
+
 ProjectorWindow *MainWindow::projectorFor(int mode) const
 {
 	for (const auto &p : projectors_)
@@ -665,6 +756,13 @@ void MainWindow::refreshOutputButtons()
 	const B list[] = {{programBtn_, int(ProjectorWindow::Mode::Program), "Program"},
 			  {previewOutBtn_, int(ProjectorWindow::Mode::Preview), "Preview"},
 			  {multiviewBtn_, int(ProjectorWindow::Mode::Multiview), "Multiview"}};
+	if (ledBtn_) {
+		const bool on = ledDlg_ && ledDlg_->outputWindow() && ledDlg_->outputWindow()->isVisible();
+		ledBtn_->setText(on ? "● LED ▾" : "LED ▾");
+		ledBtn_->setProperty("active", on);
+		ledBtn_->style()->unpolish(ledBtn_);
+		ledBtn_->style()->polish(ledBtn_);
+	}
 	for (const B &x : list) {
 		if (!x.b)
 			continue;
@@ -717,6 +815,21 @@ void MainWindow::connectSignals()
 		ltQuickBtn_->setChecked(shown);
 	});
 
+	connect(previewEditor_, &PreviewEditor::itemMenuRequested, this,
+		[this](const QString &n, const QPoint &gp) { showItemMenu(n, gp); });
+	connect(previewEditor_, &PreviewEditor::itemDoubleClicked, this, [this](const QString &n) { openTransform(n); });
+	connect(previewEditor_, &PreviewEditor::deleteRequested, this, [this](const QString &n) {
+		sm_->removeItem(editedScene(), n);
+		audio_->refresh();
+		media_->refresh();
+	});
+	connect(sm_, &SceneManager::selectionChanged, this, [this](const QString &n) {
+		QSignalBlocker b(sourcesList_);
+		sourcesList_->setCurrentItem(nullptr);
+		for (int i = 0; i < sourcesList_->count(); ++i)
+			if (sourcesList_->item(i)->data(Qt::UserRole).toString() == n)
+				sourcesList_->setCurrentRow(i);
+	});
 	connect(sm_, &SceneManager::scenesChanged, this, [this] {
 		render::clearLabelCache();
 		refreshScenes();
@@ -813,11 +926,14 @@ void MainWindow::refreshItems()
 	QSignalBlocker block(sourcesList_);
 	sourcesList_->clear();
 	for (const auto &info : sm_->items(editedScene())) {
-		auto *it = new QListWidgetItem(QString("%1   [%2]").arg(info.name, friendlyType(info.typeId)));
+		auto *it = new QListWidgetItem(QString("%1%2   [%3]")
+						       .arg(info.locked ? "🔒 " : "", info.name, friendlyType(info.typeId)));
 		it->setData(Qt::UserRole, info.name);
 		it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
 		it->setCheckState(info.visible ? Qt::Checked : Qt::Unchecked);
 		sourcesList_->addItem(it);
+		if (info.name == sm_->selectedItem())
+			sourcesList_->setCurrentItem(it);
 	}
 	if (auto *t = sourcesPanel_->findChild<QLabel *>("panelTitle"))
 		t->setText(QString("Sumber — %1").arg(editedScene()));
@@ -1008,6 +1124,81 @@ void MainWindow::chooseVideoSettings()
 	QSettings s("LiveStudio", "LiveStudio");
 	s.setValue("video/preset", c);
 	QMessageBox::information(this, "Pengaturan video", "Tersimpan. Tutup dan buka ulang Live Studio.");
+}
+
+void MainWindow::openTransform(const QString &name)
+{
+	if (name.isEmpty())
+		return;
+	sm_->selectItem(name);
+	TransformDialog(sm_, editedScene(), name, this).exec();
+}
+
+void MainWindow::editItemContent(const QString &name)
+{
+	obs_source_t *src = obs_get_source_by_name(name.toUtf8().constData());
+	if (!src)
+		return;
+	const QString id = QString::fromUtf8(obs_source_get_id(src));
+	obs_data_t *d = obs_source_get_settings(src);
+	if (id.startsWith("text_")) {
+		bool ok = false;
+		const QString t = QInputDialog::getMultiLineText(this, "Ubah teks", "Isi teks:",
+								 QString::fromUtf8(obs_data_get_string(d, "text")), &ok);
+		if (ok) {
+			obs_data_set_string(d, "text", t.toUtf8().constData());
+			obs_source_update(src, d);
+		}
+	} else if (id.startsWith("ffmpeg_source") || id.startsWith("image_source")) {
+		const bool media = id.startsWith("ffmpeg_source");
+		const QString f = QFileDialog::getOpenFileName(this, media ? "Ganti video" : "Ganti gambar");
+		if (!f.isEmpty()) {
+			obs_data_set_string(d, media ? "local_file" : "file", f.toUtf8().constData());
+			obs_source_update(src, d);
+		}
+	} else {
+		QMessageBox::information(this, "Ubah isi", "Sumber ini tidak punya isi yang bisa diubah di sini.");
+	}
+	obs_data_release(d);
+	obs_source_release(src);
+}
+
+void MainWindow::showItemMenu(const QString &name, const QPoint &globalPos)
+{
+	const QString scene = editedScene();
+	sm_->selectItem(name);
+	QMenu menu(this);
+	const bool locked = sm_->itemLocked(scene, name);
+	menu.addAction("Transform…", this, [this, name] { openTransform(name); })->setEnabled(!locked);
+	menu.addSeparator();
+	using Op = SceneManager::ItemOp;
+	auto op = [&](const QString &label, Op o) {
+		menu.addAction(label, this, [this, scene, name, o] { sm_->itemOp(scene, name, o); })->setEnabled(
+			!sm_->itemLocked(scene, name) || o == Op::ToggleLock);
+	};
+	op("Muat layar (jaga rasio)", Op::Fit);
+	op("Isi layar (potong tepi)", Op::Fill);
+	op("Pusatkan", Op::Center);
+	op("Ukuran asli 1:1", Op::Reset);
+	op("Putar 90°", Op::Rotate90);
+	menu.addSeparator();
+	op("Bawa ke depan", Op::ToFront);
+	op("Kirim ke belakang", Op::ToBack);
+	op(locked ? "Buka kunci" : "Kunci (tidak bisa digeser)", Op::ToggleLock);
+	menu.addSeparator();
+	menu.addAction("Ubah isi (teks / berkas)…", this, [this, name] { editItemContent(name); });
+	menu.addAction("Ganti nama…", this, [this, scene, name] {
+		bool ok = false;
+		const QString n = QInputDialog::getText(this, "Ganti nama sumber", "Nama baru:", QLineEdit::Normal, name, &ok);
+		if (ok && !sm_->renameSource(scene, name, n))
+			QMessageBox::information(this, "Sumber", "Nama kosong atau sudah dipakai.");
+	});
+	menu.addAction("Hapus", this, [this, scene, name] {
+		sm_->removeItem(scene, name);
+		audio_->refresh();
+		media_->refresh();
+	});
+	menu.exec(globalPos);
 }
 
 void MainWindow::buildStatusBar()

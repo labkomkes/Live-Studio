@@ -19,6 +19,8 @@ sedikit panel) dan **Profesional** (semua panel).
 | Pemutar video (putar/jeda/ulang/seek/waktu) | `src/ui/MediaPanel.*` |
 | Rekam & siaran RTMP (x264 + AAC) | `src/core/OutputManager.*`, `src/ui/OutputDialog.*` |
 | Tata letak otomatis sumber | `SceneManager::applyLayout` |
+| Editor bebas di Preview (geser/resize/snap/crop/rotasi/kunci) | `src/ui/PreviewEditor.*`, `TransformDialog.*` |
+| Layar LED ala Resolume (ukuran layar, slice, isi per scene, pola uji) | `src/core/LedScreen.*`, `src/ui/LedScreenDialog.*`, `LedScreenWindow.*` |
 | Lower third | `src/core/LowerThird.*`, `src/ui/LowerThirdPanel.*` |
 | Bumper webinar (putar video bumper lalu kembali ke scene sebelumnya) | `src/core/Bumper.*`, `src/ui/BumperPanel.*` |
 | **Deck ala vMix**: tile scene dengan thumbnail live, CUT/TAKE per tile, tombol transisi | `src/ui/DeckStrip.*`, `DeckLayout.h`, `Render.cpp` |

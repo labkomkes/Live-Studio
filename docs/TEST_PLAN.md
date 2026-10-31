@@ -46,3 +46,9 @@ mencakup tampilan visual, kualitas kamera, level audio nyata, maupun multi-monit
 | 39 | Fader dB | Geser fader, ketik -10 di kolom dB, klik dua kali fader | Volume berubah; kembali 0 dB | |
 | 40 | Menu ⚙ | Coba mode monitor, mono, balance, ganti perangkat | Setiap opsi berpengaruh | |
 | 41 | Tampilan Kanal | Tombol Kanal di mixer | Fader vertikal, panel membesar | |
+\n| 42 | Edit di Preview | Pilih sumber di Preview, geser, tarik handle, panah, Delete | Posisi/ukuran berubah, snap ke tengah, tampil di Program setelah TAKE | |
+| 43 | Transform & kunci | Klik kanan sumber > Transform; Kunci | Nilai X/Y/W/H/crop/rotasi berlaku; terkunci tidak bisa digeser | |
+| 44 | Layar LED | Produksi > Layar LED (Ctrl+M): isi ukuran, preset Kolom 3, isi tiap slice scene | Pratinjau menampilkan 3 scene berbeda | |
+| 45 | Keluaran LED | Pilih monitor/prosesor LED > Buka | Jendela pas ukuran piksel, tanpa bingkai, Esc menutup | |
+| 46 | Pola uji | Centang Pola uji | Garis slice, nama, ukuran, crosshair tampak di LED | |
+| 47 | Scene dibelah | Preset "Satu scene dibelah" | Potongan scene tersebar di beberapa slice, benar urutannya | |

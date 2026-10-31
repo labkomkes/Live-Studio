@@ -23,7 +23,17 @@ public:
 		QString name;
 		QString typeId;
 		bool visible = true;
+		bool locked = false;
 	};
+	struct ItemRect {
+		float x = 0, y = 0, w = 0, h = 0;
+	};
+	struct ItemTransform {
+		ItemRect rect;
+		float rot = 0;
+		int cropL = 0, cropT = 0, cropR = 0, cropB = 0;
+	};
+	enum class ItemOp { Fit, Fill, Center, Reset, Rotate90, ToggleLock, ToFront, ToBack };
 	struct SceneCell {
 		QString name;
 		SourceRef source;
@@ -75,6 +85,20 @@ public:
 	bool setItemVisible(const QString &scene, const QString &name, bool visible);
 	bool moveItem(const QString &scene, const QString &name, bool up);
 	static QString uniqueSourceName(const QString &base);
+	// ---- edit bebas ala OBS (koordinat piksel kanvas) ----
+	bool itemRect(const QString &scene, const QString &name, ItemRect *out) const; // kotak tampak (AABB)
+	bool setItemRect(const QString &scene, const QString &name, const ItemRect &r);  // bounds STRETCH persis r
+	bool moveItemBy(const QString &scene, const QString &name, float dx, float dy);
+	QString itemAt(const QString &scene, float cx, float cy) const; // item teratas yang tidak terkunci
+	bool itemOp(const QString &scene, const QString &name, ItemOp op);
+	bool itemTransform(const QString &scene, const QString &name, ItemTransform *out) const;
+	bool setItemTransform(const QString &scene, const QString &name, const ItemTransform &t);
+	bool itemLocked(const QString &scene, const QString &name) const;
+	bool renameSource(const QString &scene, const QString &oldName, const QString &newName);
+	bool moveScene(const QString &name, bool up);
+	QString selectedItem() const { return selected_; }
+	void selectItem(const QString &name);
+
 	// Tata letak otomatis untuk sumber video yang terlihat di scene (urutan = urutan ditambah).
 	static QStringList availableLayouts();
 	bool applyLayout(const QString &scene, const QString &layout);
@@ -87,6 +111,7 @@ signals:
 	void scenesChanged();
 	void itemsChanged(const QString &scene);
 	void previewChanged(const QString &name);
+	void selectionChanged(const QString &name);
 	void programChanged(const QString &name);
 
 private:
@@ -109,6 +134,7 @@ private:
 
 	QString previewName_;
 	QString programName_;
+	QString selected_;
 	QString transitionKind_ = "fade_transition";
 	int transitionMs_ = 400;
 	bool swapAfterTake_ = true;

@@ -62,3 +62,15 @@ Jalankan **Live Studio - Uji Mandiri**. Laporan tersimpan di `%APPDATA%\LiveStud
 | Scene & pengaturan | `%APPDATA%\LiveStudio\` |
 | Log | `%APPDATA%\LiveStudio\logs\` |
 | Laporan uji mandiri | `%APPDATA%\LiveStudio\selftest.txt` |
+
+## Edit bebas & Layar LED (0.5.0)
+
+- **Edit isi adegan seperti OBS:** pilih adegan (jadi Preview), lalu di monitor Preview klik sumber, geser, tarik
+  handle untuk ubah ukuran (Shift pada sudut = jaga rasio), panah = geser 1 px (Shift = 10 px), Delete = hapus,
+  Ctrl = matikan snap. Klik kanan sumber / klik dua kali di daftar Sumber = menu & dialog **Transform**
+  (posisi, ukuran, rotasi, crop, kunci). Perubahan tampil di Program setelah TAKE/CUT.
+- **Layar LED (Resolume-style):** menu **Produksi > Layar LED / Mapping…** (Ctrl+M) atau tombol **LED ▾** di deck.
+  Isi ukuran layar dalam piksel, bagi dengan preset (Full / Kolom / Grid / Satu adegan dibelah), isi tiap slice dari
+  adegan berbeda, Program, atau Preview. Pilih monitor/prosesor LED lalu **Buka**; **Esc** menutup. Centang
+  **Pola uji** untuk kalibrasi. Layout tersimpan otomatis dan bisa disimpan/dimuat sebagai JSON.
+- Catatan jujur: fitur ini diuji otomatis di Linux, **belum** diuji di Windows/monitor LED sungguhan.
