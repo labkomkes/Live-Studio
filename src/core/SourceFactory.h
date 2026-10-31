@@ -5,6 +5,7 @@
 #include "Raii.h"
 
 #include <QColor>
+#include <QList>
 #include <QString>
 
 namespace ls::factory {
@@ -33,6 +34,20 @@ void setTextColor(obs_data_t *settings, uint32_t abgr);
 Data textSettings(const QString &text, int fontSize, const QColor &color, bool bold = false);
 Data colorSettings(const QColor &c, int width, int height);
 Data audioDeviceSettings(const QString &deviceId);
+
+// Driver input audio yang dikenal. `available` = plugin-nya termuat di build ini.
+struct AudioDriver {
+	QString key;       // pengenal internal
+	QString label;     // ditampilkan
+	QString typeId;    // id sumber libobs (sudah di-resolve)
+	QString deviceProp; // properti daftar perangkat
+	QString note;      // keterangan singkat
+	bool available = false;
+};
+QList<AudioDriver> audioInputDrivers();
+// Settings sumber untuk driver + perangkat terpilih.
+Data audioInputSettings(const AudioDriver &drv, const QString &deviceValue);
+ObsEngine::ListItems audioDriverDevices(const AudioDriver &drv);
 
 // Daftar perangkat dari properti sumber (label, nilai).
 ObsEngine::ListItems webcams();

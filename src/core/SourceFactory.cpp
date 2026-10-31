@@ -135,4 +135,57 @@ ObsEngine::ListItems windows() { return ObsEngine::listPropertyItems(windowId(),
 ObsEngine::ListItems micDevices() { return ObsEngine::listPropertyItems(micId(), "device_id"); }
 ObsEngine::ListItems desktopAudioDevices() { return ObsEngine::listPropertyItems(desktopAudioId(), "device_id"); }
 
+QList<AudioDriver> audioInputDrivers()
+{
+	QList<AudioDriver> out;
+	auto add = [&](const char *key, const char *label, const char *base, const char *prop, const char *note) {
+		AudioDriver d;
+		d.key = key;
+		d.label = label;
+		d.typeId = ObsEngine::resolveId(base);
+		d.deviceProp = prop;
+		d.note = note;
+		d.available = ObsEngine::isAvailable(d.typeId);
+		out.append(d);
+	};
+	add("wasapi", "Driver Windows (WASAPI) - mikrofon / line-in", "wasapi_input_capture", "device_id",
+	    "Driver bawaan PC. Cocok untuk mikrofon USB, jack audio, dan mixer USB.");
+	add("wasapi_app", "Audio dari satu aplikasi (WASAPI)", "wasapi_process_output_capture", "window",
+	    "Menangkap suara satu aplikasi saja (mis. pemutar video/Zoom).");
+	add("asio", "ASIO (audio interface profesional)", "asio_input_capture", "device",
+	    "Butuh plugin ASIO tambahan (Pengaturan > Plugin > folder plugin tambahan).");
+	add("dshow", "DirectShow (kartu capture HDMI / USB)", "dshow_input", "audio_device_id",
+	    "Audio dari kartu capture atau perangkat video-audio DirectShow.");
+	add("pulse", "PulseAudio (hanya Linux, pengembangan)", "pulse_input_capture", "device_id", "");
+	return out;
+}
+
+Data audioInputSettings(const AudioDriver &drv, const QString &deviceValue)
+{
+	Data d;
+	const QByteArray v = deviceValue.toUtf8();
+	if (drv.key == "wasapi" || drv.key == "pulse") {
+		obs_data_set_string(d.get(), "device_id", v.constData());
+	} else if (drv.key == "wasapi_app") {
+		obs_data_set_string(d.get(), "window", v.constData());
+	} else if (drv.key == "asio") {
+		obs_data_set_string(d.get(), "device", v.constData());
+	} else if (drv.key == "dshow") {
+		// Hanya audio dari perangkat DirectShow (tanpa gambar).
+		obs_data_set_bool(d.get(), "use_custom_audio_device", true);
+		obs_data_set_string(d.get(), "audio_device_id", v.constData());
+		obs_data_set_int(d.get(), "audio_output_mode", 0);
+	}
+	return d;
+}
+
+ObsEngine::ListItems audioDriverDevices(const AudioDriver &drv)
+{
+	auto items = ObsEngine::listPropertyItems(drv.typeId, drv.deviceProp.toUtf8().constData());
+	// Properti DirectShow bisa memakai "audio_device_id" atau daftar "audio_device"; coba cadangan.
+	if (items.isEmpty() && drv.key == "dshow")
+		items = ObsEngine::listPropertyItems(drv.typeId, "audio_device_id");
+	return items;
+}
+
 } // namespace ls::factory

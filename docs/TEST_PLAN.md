@@ -38,3 +38,7 @@ mencakup tampilan visual, kualitas kamera, level audio nyata, maupun multi-monit
 | 31 | Rekam | Ctrl+R, 10 dtk, Ctrl+R | File .mkv di folder rekaman, video+audio ada | |
 | 32 | Siaran | Isi server+kunci, Ctrl+L | Platform menerima aliran; kbps/drop tampil; henti menutup | |
 | 33 | Tata letak | Dua sumber video > Tata letak > PiP | Susunan berubah di Preview | |
+| 34 | Driver audio WASAPI | ＋ Sumber > Input Audio > WASAPI > mikrofon | Strip baru, meter bergerak | |
+| 35 | Audio per aplikasi | Driver "Audio dari satu aplikasi" > pilih aplikasi yang sedang bunyi | Meter bergerak hanya untuk aplikasi itu | |
+| 36 | ASIO | Pasang plugin ASIO di folder tambahan, buka ulang | Driver ASIO tersedia & perangkat muncul | |
+| 37 | Output di deck | Deck > Program ▾ > Monitor 2 | Program layar penuh di monitor 2; ● menyala; pindah/tutup bekerja | |

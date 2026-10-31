@@ -7,7 +7,9 @@
 #include "../core/SceneManager.h"
 #include "../core/SourceFactory.h"
 #include "AudioMixerWidget.h"
+#include "AudioInputDialog.h"
 #include "AudioSettingsDialog.h"
+#include "PluginsDialog.h"
 #include "MediaPanel.h"
 #include "OutputDialog.h"
 #include "BumperPanel.h"
@@ -188,7 +190,7 @@ void MainWindow::buildSourceMenu()
 		{"Kamera / Webcam…", SourceKind::Webcam},   {"Layar (Monitor)…", SourceKind::Screen},
 		{"Jendela Aplikasi…", SourceKind::Window},  {"File Video…", SourceKind::Video},
 		{"Gambar…", SourceKind::Image},             {"Teks…", SourceKind::Text},
-		{"Mikrofon…", SourceKind::Mic},             {"Audio Desktop (suara komputer)…", SourceKind::DesktopAudio},
+		{"Input Audio (pilih driver)…", SourceKind::Mic},             {"Audio Desktop (suara komputer)…", SourceKind::DesktopAudio},
 	};
 	for (const Entry &e : entries) {
 		const SourceKind k = e.kind;
@@ -449,7 +451,7 @@ QWidget *MainWindow::buildDeck(QWidget *parent)
 {
 	auto *deck = new QFrame(parent);
 	deck->setObjectName("deck");
-	deck->setMinimumHeight(188);
+	deck->setMinimumHeight(228);
 	auto *h = new QHBoxLayout(deck);
 	h->setContentsMargins(0, 0, 0, 0);
 	h->setSpacing(0);
@@ -513,15 +515,34 @@ QWidget *MainWindow::buildDeck(QWidget *parent)
 	addBtn->setPopupMode(QToolButton::InstantPopup);
 	addBtn->setMenu(addSourceMenu_);
 	addBtn->setToolTip("Tambah kamera, layar, jendela, video, gambar, teks, atau audio");
-	outputBtn_ = new QToolButton(side);
-	outputBtn_->setObjectName("deckTool");
-	outputBtn_->setText("Output ▾");
-	outputBtn_->setPopupMode(QToolButton::InstantPopup);
-	outputBtn_->setToolTip("Kirim Program / Preview / Multiview ke monitor lain");
 	btns->addWidget(ltQuickBtn_, 1);
 	btns->addWidget(addBtn, 1);
-	btns->addWidget(outputBtn_, 1);
 	g->addLayout(btns);
+
+	// Output ke monitor: satu tombol per jenis, langsung di deck.
+	auto *heading2 = new QLabel("KIRIM KE MONITOR", side);
+	heading2->setObjectName("deckHeading");
+	g->addWidget(heading2);
+	auto *outs = new QHBoxLayout();
+	outs->setSpacing(4);
+	auto mkOut = [&](const QString &text, const QString &tip, int mode) {
+		auto *b = new QToolButton(side);
+		b->setObjectName("outBtn");
+		b->setText(text);
+		b->setToolTip(tip);
+		b->setPopupMode(QToolButton::InstantPopup);
+		b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+		auto *m = new QMenu(b);
+		connect(m, &QMenu::aboutToShow, this, [this, m, mode] { fillScreenMenu(m, mode); });
+		fillScreenMenu(m, mode);
+		b->setMenu(m);
+		outs->addWidget(b, 1);
+		return b;
+	};
+	programBtn_ = mkOut("Program ▾", "Tampilkan Program layar penuh di monitor/proyektor pilihan", int(ProjectorWindow::Mode::Program));
+	previewOutBtn_ = mkOut("Preview ▾", "Tampilkan Preview di monitor pilihan", int(ProjectorWindow::Mode::Preview));
+	multiviewBtn_ = mkOut("Multiview ▾", "Tampilkan semua scene (multiview) di monitor pilihan", int(ProjectorWindow::Mode::Multiview));
+	g->addLayout(outs);
 
 	h->addWidget(side, 0);
 	return deck;
@@ -536,6 +557,7 @@ void MainWindow::buildMenus()
 	file->addAction("Pengaturan video…", this, &MainWindow::chooseVideoSettings);
 	file->addAction("Pengaturan output (rekam && siaran)…", this, [this] { OutputDialog(this).exec(); });
 	file->addAction("Pengaturan audio…", this, [this] { AudioSettingsDialog(this).exec(); });
+	file->addAction("Plugin…", this, [this] { PluginsDialog(this).exec(); });
 	file->addSeparator();
 	file->addAction("Keluar", this, &QWidget::close);
 
@@ -558,13 +580,6 @@ void MainWindow::buildMenus()
 		[this] { fillScreenMenu(programOutMenu_, int(ProjectorWindow::Mode::Program)); });
 	connect(previewOutMenu_, &QMenu::aboutToShow, this,
 		[this] { fillScreenMenu(previewOutMenu_, int(ProjectorWindow::Mode::Preview)); });
-
-	// Tombol "Output ▾" di deck memakai menu yang sama.
-	auto *outMenu = new QMenu(outputBtn_);
-	outMenu->addMenu(programOutMenu_);
-	outMenu->addMenu(previewOutMenu_);
-	outMenu->addMenu(multiviewMenu_);
-	outputBtn_->setMenu(outMenu);
 
 	QMenu *prod = menuBar()->addMenu("&Produksi");
 	prod->addAction("Mulai / Hentikan Rekaman", QKeySequence("Ctrl+R"), this, [this] { toggleRecording(); });
@@ -597,13 +612,55 @@ void MainWindow::fillScreenMenu(QMenu *menu, int mode)
 	}
 	menu->addSeparator();
 	menu->addAction("Jendela biasa (tidak fullscreen)", this, [this, mode] { openProjector(mode, nullptr); });
+	if (ProjectorWindow *pw = projectorFor(mode)) {
+		menu->addSeparator();
+		QPointer<ProjectorWindow> g(pw);
+		menu->addAction("✕ Tutup output ini (atau tekan Esc)", this, [g] {
+			if (g)
+				g->close();
+		});
+	}
+}
+
+ProjectorWindow *MainWindow::projectorFor(int mode) const
+{
+	for (const auto &p : projectors_)
+		if (p && p->isVisible() && int(p->mode()) == mode)
+			return p.data();
+	return nullptr;
+}
+
+void MainWindow::refreshOutputButtons()
+{
+	struct B {
+		QToolButton *b;
+		int mode;
+		const char *text;
+	};
+	const B list[] = {{programBtn_, int(ProjectorWindow::Mode::Program), "Program"},
+			  {previewOutBtn_, int(ProjectorWindow::Mode::Preview), "Preview"},
+			  {multiviewBtn_, int(ProjectorWindow::Mode::Multiview), "Multiview"}};
+	for (const B &x : list) {
+		if (!x.b)
+			continue;
+		const bool on = projectorFor(x.mode) != nullptr;
+		x.b->setText(QString("%1%2 ▾").arg(on ? "● " : "").arg(x.text));
+		x.b->setProperty("active", on);
+		x.b->style()->unpolish(x.b);
+		x.b->style()->polish(x.b);
+	}
 }
 
 void MainWindow::openProjector(int mode, QScreen *screen)
 {
 	auto *w = new ProjectorWindow(sm_, ProjectorWindow::Mode(mode));
+	// Satu jendela per jenis: output baru menggantikan yang lama (pindah monitor = satu klik).
+	if (ProjectorWindow *old = projectorFor(mode))
+		old->close();
 	projectors_.append(QPointer<ProjectorWindow>(w));
+	connect(w, &QObject::destroyed, this, [this] { QTimer::singleShot(0, this, [this] { refreshOutputButtons(); }); });
 	w->presentOn(screen);
+	refreshOutputButtons();
 	statusBar()->showMessage("Tekan Esc pada jendela proyektor untuk menutup.", 5000);
 }
 
@@ -880,12 +937,12 @@ void MainWindow::addSourceOfKind(SourceKind kind)
 		break;
 	}
 	case SourceKind::Mic: {
-		const auto devs = factory::micDevices();
-		const int i = pickFromList("Mikrofon", "Pilih perangkat:", devs);
-		if (i < 0)
+		AudioInputDialog dlg(this);
+		if (dlg.exec() != QDialog::Accepted)
 			return;
-		Data d = factory::audioDeviceSettings(devs.at(i).second);
-		created = sm_->addSource(scene, factory::micId(), "Mic: " + devs.at(i).first, d.get(), false);
+		const auto drv = dlg.driver();
+		Data d = factory::audioInputSettings(drv, dlg.deviceValue());
+		created = sm_->addSource(scene, drv.typeId, dlg.sourceName(), d.get(), false);
 		break;
 	}
 	case SourceKind::DesktopAudio: {
@@ -939,6 +996,10 @@ void MainWindow::buildStatusBar()
 	audioBtn->setObjectName("statusBtn");
 	audioBtn->setToolTip("Pengaturan audio: perangkat monitor, mikrofon, audio desktop");
 	connect(audioBtn, &QPushButton::clicked, this, [this] { AudioSettingsDialog(this).exec(); });
+	auto *plugBtn = new QPushButton("Plugin", sb);
+	plugBtn->setObjectName("statusBtn");
+	plugBtn->setToolTip("Daftar plugin yang termuat dan folder plugin tambahan");
+	connect(plugBtn, &QPushButton::clicked, this, [this] { PluginsDialog(this).exec(); });
 	auto *outBtn = new QPushButton("Output ⚙", sb);
 	outBtn->setObjectName("statusBtn");
 	outBtn->setToolTip("Pengaturan rekam & siaran");
@@ -950,6 +1011,7 @@ void MainWindow::buildStatusBar()
 	liveBtn_->setObjectName("liveButton");
 	liveBtn_->setToolTip("Mulai/hentikan siaran RTMP (Ctrl+L)");
 	sb->addPermanentWidget(audioBtn);
+	sb->addPermanentWidget(plugBtn);
 	sb->addPermanentWidget(outBtn);
 	sb->addPermanentWidget(recBtn_);
 	sb->addPermanentWidget(liveBtn_);

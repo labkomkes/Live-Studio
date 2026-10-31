@@ -66,6 +66,8 @@ private:
 	void addSourceOfKind(SourceKind kind);
 	void openProjector(int mode, QScreen *screen);
 	void fillScreenMenu(QMenu *menu, int mode);
+	void refreshOutputButtons();
+	ProjectorWindow *projectorFor(int mode) const;
 	void chooseVideoSettings();
 	void showAbout();
 	void buildStatusBar();
@@ -90,7 +92,9 @@ private:
 	QSpinBox *durationSpin_ = nullptr;
 	QCheckBox *swapCheck_ = nullptr;
 	QPushButton *ltQuickBtn_ = nullptr;
-	QToolButton *outputBtn_ = nullptr;
+	QToolButton *programBtn_ = nullptr;
+	QToolButton *previewOutBtn_ = nullptr;
+	QToolButton *multiviewBtn_ = nullptr;
 
 	QListWidget *scenesList_ = nullptr;
 	QListWidget *sourcesList_ = nullptr;

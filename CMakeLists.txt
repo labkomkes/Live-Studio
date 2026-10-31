@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LiveStudio VERSION 0.4.0 LANGUAGES CXX)
+project(LiveStudio VERSION 0.4.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,6 +68,8 @@ set(LS_CORE_SOURCES
   src/ui/DeckStrip.cpp
   src/core/OutputManager.cpp
   src/ui/MediaPanel.cpp
+  src/ui/AudioInputDialog.cpp
+  src/ui/PluginsDialog.cpp
   src/ui/OutputDialog.cpp
   src/ui/AudioSettingsDialog.cpp
   src/ui/LowerThirdPanel.cpp

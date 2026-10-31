@@ -4,6 +4,7 @@
 #include <QList>
 #include <QPair>
 #include <QString>
+#include <QStringList>
 #include <cstdint>
 
 namespace ls {
@@ -39,6 +40,8 @@ public:
 	static QString resolveId(const char *base);
 	// Apakah tipe sumber terdaftar (plugin termuat)?
 	static bool isAvailable(const QString &resolvedId);
+	// Modul OBS yang sengaja tidak dimuat (butuh frontend/Qt OBS).
+	static QStringList deniedModules();
 	// Membaca isi properti bertipe list dari sebuah tipe sumber.
 	static ListItems listPropertyItems(const QString &resolvedId, const char *propertyName);
 

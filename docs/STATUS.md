@@ -1,6 +1,6 @@
 # Status pengujian (jujur)
 
-Terakhir diperbarui: 2026-10-31, versi 0.4.0.
+Terakhir diperbarui: 2026-10-31, versi 0.4.1.
 
 ## Sudah diuji, dan hasilnya
 
@@ -10,7 +10,7 @@ Lingkungan: Linux x86_64, Qt 6.4.2, libobs 30.0.2 (paket Ubuntu), Xvfb (tanpa GP
 |---|---|
 | Kompilasi seluruh kode (`livestudio_core`, `LiveStudio`, `LiveStudioSmoke`) | Berhasil, tanpa galat |
 | `LiveStudio --selftest` | 21 PASS, 0 FAIL; 10 WARN (sumber khusus Windows dan perangkat tidak ada, wajar di Linux) |
-| `LiveStudioSmoke` (GUI nyata, 60 pemeriksaan) | 60 PASS, 0 FAIL (lihat rincian fitur 0.4.0 di bawah). Mencakup: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
+| `LiveStudioSmoke` (GUI nyata, 60 pemeriksaan) | 69 PASS, 0 FAIL (lihat rincian fitur 0.4.0/0.4.1 di bawah). Mencakup: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
 
 Artinya logika inti (engine libobs, scene, transisi, teks/video/gambar/warna, mixer, lower third,
 bumper, alur shutdown) berjalan pada libobs sungguhan.
@@ -26,6 +26,10 @@ bumper, alur shutdown) berjalan pada libobs sungguhan.
 | Rekam (x264 + AAC, .mkv) | rekam 3 dtk, `ffprobe` | PASS: durasi ~3 dtk, trek video dan audio ada |
 | Siaran RTMP | (a) tolak bila kunci kosong, (b) server mati dilaporkan gagal, (c) siaran ke penerima RTMP lokal (`ffmpeg -listen`) | PASS ketiganya, termasuk data diterima dan terbaca `ffprobe`. Belum diuji ke YouTube/Facebook/Twitch |
 | Bar status: REC/LIVE, waktu, kbps, frame drop, FPS, CPU | tampil di tangkapan layar | Tampil; angka kbps/drop tidak diverifikasi akurat |
+
+| Deck: tombol Program / Preview / Multiview ke monitor, penanda ● aktif, menu Tutup | simulasi klik menu | PASS (jendela terbuka, penanda, tutup). Penempatan di monitor ke-2 sungguhan belum diuji |
+| Dialog Input Audio dengan pilihan driver (WASAPI, per-aplikasi, ASIO, DirectShow) | dialog dibuka | PASS: daftar driver tampil; di Linux semua driver Windows tampil "tidak tersedia" sehingga **pemilihan perangkat per driver belum teruji**. ASIO butuh plugin pihak ketiga yang tidak disertakan; DirectShow audio-only dan per-aplikasi belum diuji |
+| Dialog Plugin: daftar modul termuat + folder plugin tambahan | dialog dibuka | PASS untuk daftar; pemuatan plugin dari folder tambahan belum diuji |
 
 Temuan saat menguji: `obs_output_release` hang bila `obs_output_force_stop` dipanggil pada output yang sudah
 berhenti; sudah diperbaiki (hanya force-stop output yang aktif).

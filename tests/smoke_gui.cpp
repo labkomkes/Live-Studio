@@ -10,11 +10,14 @@
 #include "ui/DeckLayout.h"
 #include "ui/DeckStrip.h"
 #include "ui/MainWindow.h"
+#include "ui/AudioInputDialog.h"
 #include "ui/MediaPanel.h"
+#include "ui/PluginsDialog.h"
 #include "ui/ProjectorWindow.h"
 #include <QTabWidget>
 
 #include <QAction>
+#include <QComboBox>
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -547,6 +550,64 @@ int main(int argc, char *argv[])
 	} else {
 		printf("[SKIP] Media/rekam: ffmpeg tidak tersedia untuk membuat video uji\n");
 	}
+
+	// ---- Output di deck, dialog driver audio, plugin ----
+	auto outButton = [](const QString &part) -> QToolButton * {
+		for (auto *b : g_win->findChildren<QToolButton *>("outBtn"))
+			if (b->text().contains(part))
+				return b;
+		return nullptr;
+	};
+	steps.push_back({200, [&] {
+		auto *pb = outButton("Program");
+		expect(pb && outButton("Preview") && outButton("Multiview"), "Deck: tombol Program/Preview/Multiview ada");
+		if (!pb)
+			return;
+		QAction *act = nullptr;
+		for (auto *a : pb->menu()->actions())
+			if (a->text().startsWith("Jendela biasa"))
+				act = a;
+		expect(act != nullptr, "Deck: menu Program berisi daftar monitor + jendela biasa");
+		if (act)
+			act->trigger();
+	}});
+	steps.push_back({600, [&] {
+		int n = 0;
+		for (auto *w : QApplication::topLevelWidgets())
+			if (auto *pw = qobject_cast<ProjectorWindow *>(w))
+				if (pw->isVisible() && pw->mode() == ProjectorWindow::Mode::Program)
+					++n;
+		expect(n == 1, "Deck: output Program terbuka (1 jendela)", QString::number(n));
+		auto *pb = outButton("Program");
+		expect(pb && pb->text().startsWith("●"), "Deck: tombol Program menandai output aktif", pb ? pb->text() : "-");
+		shot("09_deck_output");
+		// Menu sekarang menawarkan Tutup; picu.
+		QAction *close = nullptr;
+		pb->menu()->aboutToShow();
+		for (auto *a : pb->menu()->actions())
+			if (a->text().contains("Tutup"))
+				close = a;
+		expect(close != nullptr, "Deck: menu menawarkan 'Tutup output ini'");
+		if (close)
+			close->trigger();
+	}});
+	steps.push_back({600, [&] {
+		auto *pb = outButton("Program");
+		expect(pb && !pb->text().startsWith("●"), "Deck: tombol kembali normal setelah ditutup", pb ? pb->text() : "-");
+	}});
+	steps.push_back({100, [&] {
+		AudioInputDialog dlg;
+		auto *combo = dlg.findChild<QComboBox *>("audioDriver");
+		expect(combo && combo->count() >= 4, "Audio: dialog driver menampilkan WASAPI/ASIO/DirectShow/aplikasi",
+		       combo ? QString::number(combo->count()) : "-");
+		QStringList labels;
+		for (int i = 0; combo && i < combo->count(); ++i)
+			labels << combo->itemText(i);
+		expect(labels.join("|").contains("ASIO") && labels.join("|").contains("WASAPI"), "Audio: ASIO & WASAPI terdaftar");
+		printf("       driver: %s\n", qPrintable(labels.join(" ; ")));
+		PluginsDialog pd;
+		expect(pd.moduleCount() > 3, "Plugin: daftar modul termuat", QString::number(pd.moduleCount()));
+	}});
 
 	size_t idx = 0;
 	std::function<void()> next = [&] {

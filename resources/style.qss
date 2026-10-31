@@ -92,3 +92,6 @@ QStatusBar::item { border: none; }
 #mediaSeek::sub-page:horizontal { background: #3b82f6; border-radius: 3px; }
 #mediaSeek::handle:horizontal { width: 14px; margin: -5px 0; background: #e8e8e8; border-radius: 7px; }
 #monitorBtn:checked { background: #1f6fb3; color: white; }
+#outBtn { background:#2d2d2d; border:1px solid #444; border-radius:3px; padding:5px 4px; font-weight:600; }
+#outBtn:hover { background:#3a3a3a; }
+#outBtn[active="true"] { background:#1f6fb3; border-color:#5aa0e0; color:white; }

@@ -44,6 +44,10 @@ Jalankan **Live Studio - Uji Mandiri**. Laporan tersimpan di `%APPDATA%\LiveStud
   sumber itu. Video otomatis Dengar. Jangan menyalakan Dengar pada mikrofon tanpa headphone (gema).
 - **Filter audio** (tombol *Filter ▾* di tiap strip): peredam bising, noise gate, kompresor, limiter, penguat,
   dan offset sinkron audio.
+- **Input audio & driver**: *＋ Sumber > Input Audio (pilih driver)…*: Driver Windows (WASAPI) untuk mikrofon/line-in/mixer USB,
+  audio satu aplikasi, ASIO (butuh plugin ASIO pihak ketiga, lihat Plugin), atau DirectShow (kartu capture). Beberapa driver belum teruji (lihat STATUS).
+- **Plugin**: tombol **Plugin** di bar bawah (atau File > Plugin…) menampilkan plugin termuat dan membolehkan folder plugin tambahan (berlaku setelah buka ulang).
+- **Output ke monitor**: di deck, bagian *KIRIM KE MONITOR*: **Program**, **Preview**, **Multiview** — klik, pilih monitor; tanda ● berarti aktif; pilih monitor lain untuk memindah, atau *Tutup* / Esc.
 - **Rekam / Siaran**: tombol **● Rekam** (Ctrl+R) dan **▶ Siaran** (Ctrl+L) di bar bawah. Atur folder, server,
   kunci, dan bitrate lewat **Output ⚙**. Rekaman berformat .mkv. Bar status menampilkan waktu, kbps, frame drop, FPS, CPU.
 - **Tata letak**: panel Sumber (mode Profesional) > *Tata letak ▾*: Layar penuh, Dua kolom, Pembicara + slide, PiP.

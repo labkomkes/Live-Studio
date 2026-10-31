@@ -65,12 +65,16 @@ QString ObsEngine::configDir() const
 
 // Modul OBS yang membutuhkan UI/frontend OBS Studio (obs-frontend-api). Live Studio tidak punya
 // frontend itu; memuatnya menghasilkan galat dan dapat membuat aplikasi crash.
-static bool isDeniedModule(const QString &name)
+QStringList ObsEngine::deniedModules()
 {
 	// obs-vst & plugin *-ui memakai Qt/frontend OBS (versi Qt berbeda dari Qt Live Studio -> "Entry Point Not Found").
-	static const QStringList denied = {"frontend-tools",     "obs-websocket",   "obs-browser",
-					   "obs-vst",            "decklink-captions", "decklink-output-ui",
-					   "aja-output-ui"};
+	return {"frontend-tools",   "obs-websocket",      "obs-browser", "obs-vst",
+		"decklink-captions", "decklink-output-ui", "aja-output-ui"};
+}
+
+static bool isDeniedModule(const QString &name)
+{
+	static const QStringList denied = ObsEngine::deniedModules();
 	return denied.contains(name, Qt::CaseInsensitive);
 }
 
@@ -146,6 +150,15 @@ bool ObsEngine::start(const VideoSettings &vs, QString *error)
 #endif
 	obs_add_module_path((root + "/obs-plugins/64bit").toUtf8().constData(),
 			    (root + "/data/obs-plugins/%module%").toUtf8().constData());
+	{
+		// Folder plugin tambahan pilihan pengguna (mis. plugin ASIO). Struktur: <dir>/*.dll dan <dir>/data/<modul>.
+		QSettings qs("LiveStudio", "LiveStudio");
+		const QString extra = qs.value("plugins/extraDir").toString().trimmed();
+		if (!extra.isEmpty() && QDir(extra).exists()) {
+			obs_add_module_path(extra.toUtf8().constData(), (extra + "/data/%module%").toUtf8().constData());
+			blog(LOG_INFO, "Live Studio: folder plugin tambahan: %s", extra.toUtf8().constData());
+		}
+	}
 
 	obs_video_info ovi = {};
 #ifdef _WIN32
