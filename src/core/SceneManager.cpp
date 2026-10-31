@@ -549,6 +549,10 @@ QString SceneManager::addSource(const QString &scene, const QString &typeId, con
 					      settings, nullptr);
 	if (!src)
 		return {};
+	// Video/media: terdengar di speaker operator DAN ikut ke siaran/rekaman. libobs tidak memutar
+	// audio ke speaker kecuali "monitoring" aktif; tanpa ini video terlihat tetapi senyap.
+	if (typeId == factory::mediaId())
+		obs_source_set_monitoring_type(src, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
 
 	obs_sceneitem_t *item = obs_scene_add(obs_scene_from_source(sc.get()), src);
 	obs_source_release(src); // scene memegang reference sendiri
@@ -726,6 +730,99 @@ bool SceneManager::load()
 		if (scenes_.empty())
 			return false;
 	}
+	return true;
+}
+
+} // namespace ls
+
+namespace ls {
+
+
+// ---------------------------------------------------------------- tata letak
+
+namespace {
+struct LayoutCtx {
+	std::vector<obs_sceneitem_t *> items;
+};
+bool collectLayoutItems(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	auto *ctx = static_cast<LayoutCtx *>(param);
+	obs_source_t *s = obs_sceneitem_get_source(item);
+	const char *name = obs_source_get_name(s);
+	if (name && QString::fromUtf8(name).startsWith("LS "))
+		return true; // overlay lower third
+	if (!(obs_source_get_output_flags(s) & OBS_SOURCE_VIDEO))
+		return true; // sumber audio saja
+	if (!obs_sceneitem_visible(item))
+		return true;
+	ctx->items.push_back(item);
+	return true;
+}
+void placeBox(obs_sceneitem_t *item, float x, float y, float w, float h)
+{
+	obs_sceneitem_set_alignment(item, OBS_ALIGN_LEFT | OBS_ALIGN_TOP);
+	obs_sceneitem_set_bounds_type(item, OBS_BOUNDS_SCALE_INNER);
+	obs_sceneitem_set_bounds_alignment(item, OBS_ALIGN_CENTER);
+	vec2 b{w, h}, pos{x, y};
+	obs_sceneitem_set_bounds(item, &b);
+	obs_sceneitem_set_pos(item, &pos);
+}
+} // namespace
+
+QStringList SceneManager::availableLayouts()
+{
+	return {"Layar penuh", "Dua kolom", "Pembicara + slide", "Gambar dalam gambar"};
+}
+
+bool SceneManager::applyLayout(const QString &scene, const QString &layout)
+{
+	SourceRef sc = findScene(scene);
+	if (!sc)
+		return false;
+	obs_video_info ovi;
+	if (!obs_get_video_info(&ovi))
+		return false;
+	const float W = float(ovi.base_width), H = float(ovi.base_height);
+
+	LayoutCtx ctx;
+	obs_scene_enum_items(obs_scene_from_source(sc.get()), collectLayoutItems, &ctx);
+	// obs_scene_enum_items mengurutkan dari lapisan terbawah ke teratas = urutan sumber ditambahkan.
+	const size_t n = ctx.items.size();
+	if (n == 0)
+		return false;
+
+	if (layout == "Layar penuh") {
+		for (auto *it : ctx.items)
+			placeBox(it, 0, 0, W, H);
+	} else if (layout == "Dua kolom") {
+		const float gap = W * 0.01f;
+		const float cw = (W - gap) / 2.f;
+		for (size_t i = 0; i < n; ++i) {
+			if (i == 0)
+				placeBox(ctx.items[i], 0, 0, n == 1 ? W : cw, H);
+			else
+				placeBox(ctx.items[i], cw + gap, 0, cw, H);
+		}
+	} else if (layout == "Pembicara + slide") {
+		// item pertama (slide/layar) 70% kiri; sisanya (kamera) tumpuk di kolom kanan.
+		const float gap = W * 0.01f;
+		const float lw = W * 0.7f;
+		const float rw = W - lw - gap;
+		placeBox(ctx.items[0], 0, 0, n == 1 ? W : lw, H);
+		if (n > 1) {
+			const float rh = H / float(n - 1);
+			for (size_t i = 1; i < n; ++i)
+				placeBox(ctx.items[i], lw + gap, rh * float(i - 1), rw, rh);
+		}
+	} else if (layout == "Gambar dalam gambar") {
+		placeBox(ctx.items[0], 0, 0, W, H);
+		const float pw = W * 0.28f, ph = H * 0.28f, m = W * 0.02f;
+		for (size_t i = 1; i < n; ++i)
+			placeBox(ctx.items[i], W - pw - m, H - ph * float(i) - m * float(i), pw, ph);
+	} else {
+		return false;
+	}
+	emit itemsChanged(scene);
 	return true;
 }
 

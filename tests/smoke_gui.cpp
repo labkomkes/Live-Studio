@@ -3,12 +3,16 @@
 // membuka Multiview, menayangkan lower third, memutar bumper) lalu memeriksa label Program/Preview.
 // Variabel lingkungan: LS_SMOKE_SHOT_DIR = folder untuk tangkapan layar (hanya Linux, butuh `import`).
 #include "core/ObsEngine.h"
+#include "core/OutputManager.h"
 #include "core/SceneManager.h"
 #include "core/SourceFactory.h"
 #include "ui/AudioMixerWidget.h"
 #include "ui/DeckLayout.h"
 #include "ui/DeckStrip.h"
 #include "ui/MainWindow.h"
+#include "ui/MediaPanel.h"
+#include "ui/ProjectorWindow.h"
+#include <QTabWidget>
 
 #include <QAction>
 #include <QApplication>
@@ -23,6 +27,7 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QToolButton>
+#include <QSettings>
 #include <QTimer>
 
 #include <cstdio>
@@ -130,7 +135,7 @@ int main(int argc, char *argv[])
 	bool haveTone = false;
 	if (QProcess::execute("ffmpeg", {"-y", "-loglevel", "error", "-f", "lavfi", "-i",
 					 "color=c=gray:size=640x360:rate=30:duration=12", "-f", "lavfi", "-i",
-					 "sine=frequency=1000:duration=12", "-shortest", "-pix_fmt", "yuv420p",
+					 "sine=frequency=1000:duration=12", "-shortest", "-pix_fmt", "yuv420p", "-g", "15",
 					 toneFile}) == 0)
 		haveTone = QFile::exists(toneFile);
 
@@ -293,6 +298,254 @@ int main(int argc, char *argv[])
 		}});
 	} else {
 		printf("[SKIP] Bumper: ffmpeg tidak tersedia untuk membuat video uji\n");
+	}
+
+	// ---- Pemutar video, monitoring audio, filter, tata letak, rekam, siaran ----
+	static OutputManager *om = nullptr;
+	static QString recFile;
+	static QString streamErr;
+	static bool streamStopped = false;
+	auto probeSeconds = [](const QString &file, QString *streams) {
+		QProcess p;
+		p.start("ffprobe", {"-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of",
+				    "default=nw=1", file});
+		p.waitForFinished(15000);
+		const QString out = QString::fromUtf8(p.readAllStandardOutput());
+		if (streams)
+			*streams = out;
+		for (const QString &l : out.split('\n'))
+			if (l.startsWith("duration="))
+				return l.mid(9).toDouble();
+		return -1.0;
+	};
+	auto currentMedia = []() -> obs_source_t * {
+		auto *mp = g_win->findChild<MediaPanel *>();
+		return mp ? obs_get_source_by_name(mp->currentName().toUtf8().constData()) : nullptr;
+	};
+	if (haveTone) {
+		steps.push_back({100, [&] {
+			for (auto *pw : QApplication::topLevelWidgets())
+				if (qobject_cast<ProjectorWindow *>(pw))
+					pw->close(); // jendela Multiview dari uji sebelumnya menutupi tangkapan layar
+			if (auto *tabs = g_win->findChild<QTabWidget *>("toolsTabs"))
+				tabs->setCurrentIndex(1);
+			auto *sm = g_win->sceneManager();
+			Data d = factory::mediaSettings(toneFile, false, true);
+			const QString n = sm->addSource(sm->previewName(), factory::mediaId(), "Media Uji", d.get(), true);
+			expect(n == "Media Uji", "Media: sumber video ditambahkan", n);
+			auto *mp = g_win->findChild<MediaPanel *>();
+			mp->selectSource(n);
+			expect(mp->currentName() == "Media Uji", "Media: panel memilih sumber video");
+			obs_source_t *s = obs_get_source_by_name("Media Uji");
+			expect(s && obs_source_get_monitoring_type(s) == OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT,
+			       "Audio: video otomatis Dengar (monitor + output)");
+			if (s)
+				obs_source_release(s);
+		}});
+		steps.push_back({3500, [&] {
+			obs_source_t *s = currentMedia();
+			const int64_t dur = s ? obs_source_media_get_duration(s) : -1;
+			const auto st = s ? obs_source_media_get_state(s) : OBS_MEDIA_STATE_NONE;
+			if (s)
+				obs_source_release(s);
+			expect(dur > 11000 && dur < 13000, "Media: durasi terbaca (~12 dtk)", QString::number(dur));
+			expect(st != OBS_MEDIA_STATE_PLAYING && st != OBS_MEDIA_STATE_ERROR,
+			       "Media: video siap di frame awal (belum diputar), menunggu tombol Putar",
+			       QString::number(int(st)));
+			auto *lbl = g_win->findChild<QLabel *>("mediaTime");
+			expect(lbl && lbl->text().endsWith("/ 00:12"), "Media: label waktu 'posisi / durasi'",
+			       lbl ? lbl->text() : "-");
+			shot("07_media");
+			g_win->findChild<MediaPanel *>()->playPause(); // Putar
+		}});
+		static int64_t pausedAt = 0;
+		steps.push_back({1000, [&] {
+			obs_source_t *s = currentMedia();
+			const int64_t t = obs_source_media_get_time(s);
+			expect(obs_source_media_get_state(s) == OBS_MEDIA_STATE_PLAYING && t > 300,
+			       "Media: Putar -> state PLAYING & waktu berjalan",
+			       QString("state=%1 t=%2").arg(int(obs_source_media_get_state(s))).arg(t));
+			obs_source_release(s);
+			auto *pb = g_win->findChild<MediaPanel *>()->findChild<QPushButton *>("mediaBtn");
+			(void)pb;
+			g_win->findChild<MediaPanel *>()->playPause(); // Jeda
+		}});
+		steps.push_back({400, [&] {
+			obs_source_t *s = currentMedia();
+			pausedAt = obs_source_media_get_time(s);
+			expect(obs_source_media_get_state(s) == OBS_MEDIA_STATE_PAUSED, "Media: Jeda -> state PAUSED",
+			       QString::number(int(obs_source_media_get_state(s))));
+			obs_source_release(s);
+		}});
+		steps.push_back({800, [&] {
+			obs_source_t *s = currentMedia();
+			const int64_t t = obs_source_media_get_time(s);
+			obs_source_release(s);
+			expect(std::llabs(t - pausedAt) < 150, "Media: posisi tidak maju saat jeda",
+			       QString("%1 -> %2").arg(pausedAt).arg(t));
+			g_win->findChild<MediaPanel *>()->playPause(); // lanjut
+		}});
+		steps.push_back({900, [&] {
+			obs_source_t *s = currentMedia();
+			const int64_t t = obs_source_media_get_time(s);
+			expect(obs_source_media_get_state(s) == OBS_MEDIA_STATE_PLAYING && t > pausedAt + 300,
+			       "Media: Putar lagi -> posisi maju", QString("%1 -> %2").arg(pausedAt).arg(t));
+			obs_source_release(s);
+			g_win->findChild<MediaPanel *>()->seekTo(8000);
+		}});
+		steps.push_back({500, [&] {
+			obs_source_t *s = currentMedia();
+			const int64_t t = obs_source_media_get_time(s);
+			obs_source_release(s);
+			expect(t >= 7800 && t < 10500, "Media: geser ke 0:08 (seek)", QString::number(t));
+			g_win->findChild<MediaPanel *>()->restart();
+		}});
+		steps.push_back({500, [&] {
+			obs_source_t *s = currentMedia();
+			const int64_t t = obs_source_media_get_time(s);
+			obs_source_release(s);
+			expect(t >= 0 && t < 2500, "Media: Ulang dari awal (restart)", QString::number(t));
+			g_win->findChild<MediaPanel *>()->stop();
+		}});
+
+		// Audio: tombol Dengar dan filter pada strip
+		steps.push_back({100, [&] {
+			AudioStrip *strip = nullptr;
+			for (auto *st : g_win->findChildren<AudioStrip *>())
+				if (st->sourceName() == "Media Uji")
+					strip = st;
+			expect(strip != nullptr, "Audio: strip 'Media Uji' ada di mixer");
+			if (!strip)
+				return;
+			expect(strip->monitoring(), "Audio: strip menampilkan Dengar aktif");
+			auto *btn = strip->findChild<QToolButton *>("monitorBtn");
+			btn->click();
+			expect(!strip->monitoring(), "Audio: tombol Dengar dimatikan");
+			btn->click();
+			expect(strip->monitoring(), "Audio: tombol Dengar dinyalakan lagi");
+			expect(strip->toggleFilter("gain_filter", true) && strip->hasFilter("gain_filter"),
+			       "Audio: filter Penguat dipasang");
+			expect(strip->toggleFilter("compressor_filter", true) && strip->hasFilter("compressor_filter"),
+			       "Audio: filter Kompresor dipasang");
+			strip->toggleFilter("gain_filter", false);
+			expect(!strip->hasFilter("gain_filter"), "Audio: filter Penguat dilepas");
+			strip->toggleFilter("compressor_filter", false);
+		}});
+
+		// Tata letak
+		steps.push_back({100, [&] {
+			auto *sm = g_win->sceneManager();
+			const QString ls = sm->createScene("Layout Uji");
+			sm->setPreview(ls);
+			Data c = factory::colorSettings(QColor(200, 40, 40), 640, 360);
+			Data c2 = factory::colorSettings(QColor(40, 40, 200), 640, 360);
+			sm->addSource(ls, factory::colorId(), "Kotak Biru", c2.get(), true);
+			sm->addSource(ls, factory::colorId(), "Kotak Merah", c.get(), true);
+			expect(sm->applyLayout(ls, "Dua kolom"), "Layout: Dua kolom diterapkan");
+			SourceRef sc = sm->findScene(ls);
+			obs_sceneitem_t *a = obs_scene_find_source(obs_scene_from_source(sc.get()), "Kotak Biru");
+			obs_sceneitem_t *b = obs_scene_find_source(obs_scene_from_source(sc.get()), "Kotak Merah");
+			vec2 pa, pb, ba, bb;
+			obs_sceneitem_get_pos(a, &pa);
+			obs_sceneitem_get_pos(b, &pb);
+			obs_sceneitem_get_bounds(a, &ba);
+			obs_sceneitem_get_bounds(b, &bb);
+			expect(pa.x == 0 && pb.x > 600 && ba.x < 1000 && bb.x < 1000,
+			       "Layout: dua item berdampingan, masing-masing ~setengah kanvas",
+			       QString("a.x=%1 b.x=%2 wa=%3").arg(pa.x).arg(pb.x).arg(ba.x));
+			expect(sm->applyLayout(ls, "Gambar dalam gambar"), "Layout: PiP diterapkan");
+			obs_sceneitem_get_bounds(b, &bb);
+			expect(bb.x < 600, "Layout: PiP mengecilkan item kedua", QString::number(bb.x));
+			shot("08_layout_pip");
+		}});
+
+		// Rekam
+		steps.push_back({100, [&] {
+			OutputSettings os = OutputSettings::load();
+			os.recordDir = QDir::tempPath() + "/ls_smoke_rec";
+			os.save(true);
+			QDir(os.recordDir).removeRecursively();
+			om = new OutputManager();
+			QString e;
+			const bool ok = om->startRecording(&e);
+			expect(ok, "Rekam: mulai", e);
+			recFile = om->recordingPath();
+			// Putar ulang media agar audio ikut terekam.
+			g_win->findChild<MediaPanel *>()->restart();
+		}});
+		steps.push_back({3500, [&] {
+			expect(om->recording(), "Rekam: status merekam");
+			expect(om->recordingBytes() > 0, "Rekam: byte bertambah", QString::number(om->recordingBytes()));
+			om->stopRecording();
+		}});
+		steps.push_back({2500, [&] {
+			expect(!om->recording(), "Rekam: berhenti");
+			QString st;
+			const double d = probeSeconds(recFile, &st);
+			expect(d > 2.0 && d < 6.0, "Rekam: durasi file ~3 dtk (ffprobe)", QString::number(d));
+			expect(st.contains("codec_type=video") && st.contains("codec_type=audio"),
+			       "Rekam: file punya trek video DAN audio", st.simplified());
+		}});
+
+		// Siaran: validasi + jalur gagal + RTMP nyata ke penerima lokal (ffmpeg)
+		steps.push_back({100, [&] {
+			OutputSettings os = OutputSettings::load();
+			os.server = "rtmp://127.0.0.1:19350/live";
+			os.key = "";
+			os.save(true);
+			QString e;
+			expect(!om->startStreaming(&e) && !e.isEmpty(), "Siaran: ditolak bila kunci kosong", e);
+			os.key = "test";
+			os.save(true);
+			os.server = "rtmp://127.0.0.1:1/live"; // port tertutup
+			os.save(true);
+			QObject::connect(om, &OutputManager::streamingChanged, [](bool on, const QString &info) {
+				if (!on) {
+					streamStopped = true;
+					streamErr = info;
+				}
+			});
+			const bool started = om->startStreaming(&e);
+			expect(started, "Siaran: start diterima, koneksi ke port tertutup akan gagal", e);
+		}});
+		steps.push_back({6000, [&] {
+			expect(streamStopped && streamErr.contains("kode"), "Siaran: kegagalan koneksi dilaporkan",
+			       streamErr);
+		}});
+		steps.push_back({100, [&] {
+			// Penerima RTMP lokal: ffmpeg mendengarkan, lalu Live Studio menyiarkan ke sana.
+			static QProcess *rx = new QProcess();
+			QFile::remove(QDir::tempPath() + "/ls_rx.flv");
+			rx->start("ffmpeg", {"-y", "-loglevel", "error", "-listen", "1", "-i",
+					     "rtmp://127.0.0.1:19350/live/test", "-t", "5", "-c", "copy",
+					     QDir::tempPath() + "/ls_rx.flv"});
+			rx->waitForStarted(3000);
+			QTimer::singleShot(1200, [] {
+				OutputSettings os = OutputSettings::load();
+				os.server = "rtmp://127.0.0.1:19350/live";
+				os.key = "test";
+				os.save(true);
+				streamStopped = false;
+				QString e;
+				expect(om->startStreaming(&e), "Siaran RTMP lokal: mulai", e);
+			});
+		}});
+		steps.push_back({5000, [&] {
+			expect(om->streaming() || streamStopped, "Siaran RTMP lokal: berjalan");
+			const uint64_t b = om->streamBytes();
+			expect(b > 10000, "Siaran RTMP lokal: data terkirim", QString::number(b));
+			om->stopStreaming();
+		}});
+		steps.push_back({3500, [&] {
+			QString st;
+			const double d = probeSeconds(QDir::tempPath() + "/ls_rx.flv", &st);
+			expect(d > 1.0, "Siaran RTMP lokal: penerima menerima aliran (ffprobe)", QString::number(d));
+			om->shutdown();
+			delete om;
+			om = nullptr;
+		}});
+	} else {
+		printf("[SKIP] Media/rekam: ffmpeg tidak tersedia untuk membuat video uji\n");
 	}
 
 	size_t idx = 0;

@@ -1,6 +1,8 @@
 #include "AudioMixerWidget.h"
 
 #include <QHBoxLayout>
+#include <QInputDialog>
+#include <QMenu>
 #include <QLabel>
 #include <QPainter>
 #include <QScrollArea>
@@ -86,9 +88,33 @@ AudioStrip::AudioStrip(const SourceRef &src, QWidget *parent) : QWidget(parent),
 	lay->setContentsMargins(6, 4, 6, 4);
 	lay->setSpacing(2);
 
+	auto *top = new QHBoxLayout();
+	top->setSpacing(4);
 	name_ = new QLabel(QString::fromUtf8(obs_source_get_name(src_.get())), this);
 	name_->setStyleSheet("font-weight:600;");
-	lay->addWidget(name_);
+	top->addWidget(name_, 1);
+
+	monitor_ = new QToolButton(this);
+	monitor_->setObjectName("monitorBtn");
+	monitor_->setCheckable(true);
+	monitor_->setText("Dengar");
+	monitor_->setToolTip("Dengarkan sumber ini di speaker/headphone operator.\n"
+			     "Matikan untuk mikrofon (menghindari gema) dan audio desktop.");
+	monitor_->setChecked(monitoring());
+	top->addWidget(monitor_);
+
+	filters_ = new QToolButton(this);
+	filters_->setText("Filter ▾");
+	filters_->setPopupMode(QToolButton::InstantPopup);
+	filters_->setToolTip("Peredam bising, noise gate, kompresor, limiter, penguat, offset sinkron");
+	top->addWidget(filters_);
+
+	mute_ = new QToolButton(this);
+	mute_->setCheckable(true);
+	mute_->setText("Mute");
+	mute_->setChecked(obs_source_muted(src_.get()));
+	top->addWidget(mute_);
+	lay->addLayout(top);
 
 	meter_ = new MeterBar(this);
 	lay->addWidget(meter_);
@@ -100,15 +126,8 @@ AudioStrip::AudioStrip(const SourceRef &src, QWidget *parent) : QWidget(parent),
 	dbLabel_ = new QLabel(this);
 	dbLabel_->setMinimumWidth(52);
 	dbLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-
-	mute_ = new QToolButton(this);
-	mute_->setCheckable(true);
-	mute_->setText("Mute");
-	mute_->setChecked(obs_source_muted(src_.get()));
-
 	row->addWidget(fader_, 1);
 	row->addWidget(dbLabel_);
-	row->addWidget(mute_);
 	lay->addLayout(row);
 
 	auto updateDbText = [this](int v) {
@@ -124,6 +143,44 @@ AudioStrip::AudioStrip(const SourceRef &src, QWidget *parent) : QWidget(parent),
 		updateDbText(v);
 	});
 	connect(mute_, &QToolButton::toggled, this, [this](bool on) { obs_source_set_muted(src_.get(), on); });
+	connect(monitor_, &QToolButton::toggled, this, [this](bool on) { setMonitoring(on); });
+
+	struct F {
+		const char *id;
+		const char *label;
+	};
+	static const F kFilters[] = {{"noise_suppress_filter_v2", "Peredam bising"},
+				     {"noise_gate_filter", "Noise gate"},
+				     {"compressor_filter", "Kompresor"},
+				     {"limiter_filter", "Limiter"},
+				     {"gain_filter", "Penguat (gain)"}};
+	auto *menu = new QMenu(filters_);
+	for (const F &f : kFilters) {
+		const QString id = f.id;
+		QAction *a = menu->addAction(f.label);
+		a->setCheckable(true);
+		a->setEnabled(obs_source_get_display_name(f.id) != nullptr);
+		if (!a->isEnabled())
+			a->setToolTip("Tidak tersedia pada build ini");
+		a->setChecked(hasFilter(id));
+		connect(a, &QAction::toggled, this, [this, id, a](bool on) {
+			if (!toggleFilter(id, on)) {
+				QSignalBlocker b(a);
+				a->setChecked(!on);
+			}
+		});
+	}
+	menu->addSeparator();
+	menu->addAction("Offset sinkron audio…", this, [this] {
+		bool ok = false;
+		const int cur = int(obs_source_get_sync_offset(src_.get()) / 1000000);
+		const int v = QInputDialog::getInt(this, "Offset sinkron",
+						   "Tunda audio (ms). Naikkan bila suara datang lebih dulu dari gambar:",
+						   cur, -950, 20000, 10, &ok);
+		if (ok)
+			obs_source_set_sync_offset(src_.get(), int64_t(v) * 1000000);
+	});
+	filters_->setMenu(menu);
 
 	volmeter_ = obs_volmeter_create(OBS_FADER_LOG);
 	obs_volmeter_attach_source(volmeter_, src_.get());
@@ -138,6 +195,53 @@ AudioStrip::~AudioStrip()
 		obs_volmeter_destroy(volmeter_);
 		volmeter_ = nullptr;
 	}
+}
+
+bool AudioStrip::monitoring() const
+{
+	return obs_source_get_monitoring_type(src_.get()) != OBS_MONITORING_TYPE_NONE;
+}
+
+void AudioStrip::setMonitoring(bool on)
+{
+	obs_source_set_monitoring_type(src_.get(), on ? OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT
+						      : OBS_MONITORING_TYPE_NONE);
+}
+
+bool AudioStrip::hasFilter(const QString &id) const
+{
+	obs_source_t *f = obs_source_get_filter_by_name(src_.get(), id.toUtf8().constData());
+	if (f)
+		obs_source_release(f);
+	return f != nullptr;
+}
+
+bool AudioStrip::toggleFilter(const QString &id, bool on)
+{
+	// Nama filter = id supaya mudah dicari; satu filter per jenis per sumber.
+	const QByteArray idb = id.toUtf8();
+	if (!on) {
+		obs_source_t *f = obs_source_get_filter_by_name(src_.get(), idb.constData());
+		if (!f)
+			return true;
+		obs_source_filter_remove(src_.get(), f);
+		obs_source_release(f);
+		return true;
+	}
+	if (hasFilter(id))
+		return true;
+	obs_data_t *d = obs_data_create();
+	if (id == "noise_suppress_filter_v2")
+		obs_data_set_string(d, "method", "rnnoise");
+	else if (id == "limiter_filter")
+		obs_data_set_double(d, "threshold", -6.0);
+	obs_source_t *f = obs_source_create(idb.constData(), idb.constData(), d, nullptr);
+	obs_data_release(d);
+	if (!f)
+		return false;
+	obs_source_filter_add(src_.get(), f);
+	obs_source_release(f);
+	return true;
 }
 
 QString AudioStrip::sourceName() const
@@ -223,6 +327,8 @@ static bool enumAudioCb(void *param, obs_source_t *src)
 		return true; // sudah dihapus dari scene; jangan tampilkan lagi di mixer
 	if (!(obs_source_get_output_flags(src) & OBS_SOURCE_AUDIO))
 		return true;
+	if (std::string(obs_source_get_name(src)).rfind("LS ", 0) == 0)
+		return true; // sumber internal (bumper) tidak ditampilkan
 	ctx->out->push_back(SourceRef::borrow(src));
 	return true;
 }

@@ -60,14 +60,16 @@ Data windowSettings(const QString &windowValue)
 	return d;
 }
 
-Data mediaSettings(const QString &path, bool loop)
+Data mediaSettings(const QString &path, bool loop, bool stayLoaded)
 {
 	Data d;
 	obs_data_set_bool(d.get(), "is_local_file", true);
 	obs_data_set_string(d.get(), "local_file", path.toUtf8().constData());
 	obs_data_set_bool(d.get(), "looping", loop);
-	obs_data_set_bool(d.get(), "restart_when_active", true);
-	obs_data_set_bool(d.get(), "close_when_inactive", true);
+	// stayLoaded: video tetap terbuka/diputar walau scene-nya hanya di Preview (bisa dilatih & dikontrol
+	// dengan pemutar video). Bumper memakai false: mulai dari awal saat tayang.
+	obs_data_set_bool(d.get(), "restart_when_active", !stayLoaded);
+	obs_data_set_bool(d.get(), "close_when_inactive", !stayLoaded);
 	obs_data_set_bool(d.get(), "hw_decode", true);
 	return d;
 }

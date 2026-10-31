@@ -26,7 +26,7 @@ uint32_t toObsColor(const QColor &c, int alpha = 255);
 Data webcamSettings(const QString &deviceValue, const QString &resolution /* "" = otomatis */);
 Data monitorSettings(const QString &monitorValue, bool captureCursor);
 Data windowSettings(const QString &windowValue);
-Data mediaSettings(const QString &path, bool loop);
+Data mediaSettings(const QString &path, bool loop, bool stayLoaded = false);
 Data imageSettings(const QString &path);
 // Mengatur warna teks untuk semua varian sumber teks (gdiplus & freetype2).
 void setTextColor(obs_data_t *settings, uint32_t abgr);

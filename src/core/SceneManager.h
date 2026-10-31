@@ -75,6 +75,9 @@ public:
 	bool setItemVisible(const QString &scene, const QString &name, bool visible);
 	bool moveItem(const QString &scene, const QString &name, bool up);
 	static QString uniqueSourceName(const QString &base);
+	// Tata letak otomatis untuk sumber video yang terlihat di scene (urutan = urutan ditambah).
+	static QStringList availableLayouts();
+	bool applyLayout(const QString &scene, const QString &layout);
 
 	// ---- simpan / muat ----
 	QString collectionPath() const;

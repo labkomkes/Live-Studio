@@ -31,3 +31,10 @@ mencakup tampilan visual, kualitas kamera, level audio nyata, maupun multi-monit
 | 25 | Deck: banyak scene | Buat 12+ scene; putar roda mouse di deck | Daftar tile bergeser, klik tetap tepat | |
 | 26 | Deck: tampilan layar kecil / DPI 150% | Jalankan di laptop 1366x768 dan skala 150% | Semua kontrol terlihat; klik tile tepat | |
 | 20 | Installer | Pasang di PC bersih, jalankan, copot | Terpasang, jalan, tercopot | |
+| 27 | Video: kontrol | Tambah video; tekan ▶, ⏸, ⏮, ⏹, geser bilah | Putar/jeda/ulang/loncat bekerja, waktu berjalan | |
+| 28 | Suara terdengar | Audio ⚙ pilih speaker; video Dengar aktif; putar | Suara keluar di speaker | |
+| 29 | Dengar mikrofon | Nyalakan Dengar pada mic (pakai headphone) | Suara mic terdengar di headphone | |
+| 30 | Filter | Mic > Filter > Peredam bising / Kompresor | Meter dan suara berubah | |
+| 31 | Rekam | Ctrl+R, 10 dtk, Ctrl+R | File .mkv di folder rekaman, video+audio ada | |
+| 32 | Siaran | Isi server+kunci, Ctrl+L | Platform menerima aliran; kbps/drop tampil; henti menutup | |
+| 33 | Tata letak | Dua sumber video > Tata letak > PiP | Susunan berubah di Preview | |

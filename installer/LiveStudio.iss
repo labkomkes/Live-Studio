@@ -1,6 +1,6 @@
 ; Live Studio - skrip Inno Setup 6.
 ; Dipanggil oleh scripts/package-windows.ps1 dengan:
-;   /DAppVersion=0.3.1 /DStageDir=<folder hasil cmake --install> /DOutputDir=<dist> /DRedistFile=<vc_redist.x64.exe>
+;   /DAppVersion=0.4.0 /DStageDir=<folder hasil cmake --install> /DOutputDir=<dist> /DRedistFile=<vc_redist.x64.exe>
 ; STATUS: belum dikompilasi/diuji oleh penulis (tidak ada Windows/Inno Setup di lingkungan pengembangan).
 
 #ifndef AppVersion

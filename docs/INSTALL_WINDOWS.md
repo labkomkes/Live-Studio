@@ -1,7 +1,6 @@
 # Memasang dan memakai Live Studio (Windows)
 
-> Installer belum pernah dibuat/dijalankan di Windows (lihat `STATUS.md`). Panduan ini menjelaskan
-> perilaku yang dirancang.
+> Fitur 0.4.0 baru diuji di Linux (lihat `STATUS.md`); verifikasi di Windows menunggu laporan Anda.
 
 ## Memasang
 
@@ -35,7 +34,19 @@ Jalankan **Live Studio - Uji Mandiri**. Laporan tersimpan di `%APPDATA%\LiveStud
 6. **Proyektor / Multiview**: menu *Multiview* (mode Profesional) dan menu keluaran Preview/Program membuka jendela di monitor yang dipilih.
 7. Mode **Sederhana** vs **Profesional** lewat menu *Tampilan* > Mode Profesional.
 
-Catatan: versi ini belum mengirim siaran (RTMP) atau merekam.
+## Pemutar video, audio, rekam, siaran (0.4.0)
+
+- **Pemutar video**: setelah menambah video, tab **Pemutar Video** terbuka. Video berhenti di frame awal;
+  tekan ▶ untuk memutar, ⏸ untuk jeda, ⏮ ulang dari awal, ⏹ berhenti, geser bilah untuk loncat, centang
+  *Ulangi* untuk loop. Waktu tampil sebagai `posisi / durasi`. Pintasan: Ctrl+P putar/jeda, Ctrl+Shift+P ulang.
+- **Suara tidak keluar di komputer?** libobs hanya memutar ke speaker lewat *monitoring*. Buka **Audio ⚙**
+  (bar bawah), pilih perangkat keluaran monitor, lalu pastikan tombol **Dengar** di Audio Mixer menyala untuk
+  sumber itu. Video otomatis Dengar. Jangan menyalakan Dengar pada mikrofon tanpa headphone (gema).
+- **Filter audio** (tombol *Filter ▾* di tiap strip): peredam bising, noise gate, kompresor, limiter, penguat,
+  dan offset sinkron audio.
+- **Rekam / Siaran**: tombol **● Rekam** (Ctrl+R) dan **▶ Siaran** (Ctrl+L) di bar bawah. Atur folder, server,
+  kunci, dan bitrate lewat **Output ⚙**. Rekaman berformat .mkv. Bar status menampilkan waktu, kbps, frame drop, FPS, CPU.
+- **Tata letak**: panel Sumber (mode Profesional) > *Tata letak ▾*: Layar penuh, Dua kolom, Pembicara + slide, PiP.
 
 ## Lokasi berkas
 

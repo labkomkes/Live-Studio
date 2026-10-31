@@ -75,3 +75,20 @@ QToolButton#transBtn:hover { background: #444; }
 QToolButton#transBtn:checked { background: #3d6db3; border-color: #6a98dc; color: #fff; }
 QPushButton#ltQuick, QToolButton#deckTool { padding: 7px 4px; font-weight: 600; }
 QPushButton#ltQuick:checked { background: #c0392b; border-color: #e4584a; color: #fff; }
+
+/* --- Status bar, rekam/siaran, pemutar video --- */
+QStatusBar { background: #1b1b1b; color: #cfcfcf; }
+QStatusBar::item { border: none; }
+#statLabel { color: #9fb0c0; padding-right: 10px; }
+#statusBtn { background: #2d2d2d; border: 1px solid #444; padding: 3px 10px; border-radius: 3px; }
+#statusBtn:hover { background: #3a3a3a; }
+#recButton, #liveButton { background: #2d2d2d; border: 1px solid #555; padding: 3px 12px; border-radius: 3px; font-weight: 600; }
+#recButton:hover, #liveButton:hover { background: #3c3c3c; }
+#recButton[active="true"] { background: #b32b2b; border-color: #e55; color: white; }
+#liveButton[active="true"] { background: #1f7a3a; border-color: #4c8; color: white; }
+#mediaBtn { font-size: 15px; padding: 3px 0; }
+#mediaTime { font-family: Consolas, monospace; color: #dcdcdc; }
+#mediaSeek::groove:horizontal { height: 6px; background: #3a3a3a; border-radius: 3px; }
+#mediaSeek::sub-page:horizontal { background: #3b82f6; border-radius: 3px; }
+#mediaSeek::handle:horizontal { width: 14px; margin: -5px 0; background: #e8e8e8; border-radius: 7px; }
+#monitorBtn:checked { background: #1f6fb3; color: white; }

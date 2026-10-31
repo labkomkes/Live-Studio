@@ -1,5 +1,7 @@
 #include "ObsEngine.h"
 
+#include <QSettings>
+
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -179,6 +181,17 @@ bool ObsEngine::start(const VideoSettings &vs, QString *error)
 	if (!obs_reset_audio(&oai)) {
 		obs_shutdown();
 		return fail("obs_reset_audio() gagal.");
+	}
+
+	// libobs tidak memutar audio ke speaker kecuali perangkat monitoring diset.
+	{
+		QSettings qs("LiveStudio", "LiveStudio");
+		const QString mid = qs.value("audio/monitorId", "default").toString();
+		const QString mname = qs.value("audio/monitorName", "Default").toString();
+		if (obs_audio_monitoring_available())
+			obs_set_audio_monitoring_device(mname.toUtf8().constData(), mid.toUtf8().constData());
+		else
+			blog(LOG_WARNING, "Live Studio: monitoring audio tidak tersedia di build ini");
 	}
 
 	loadModules();

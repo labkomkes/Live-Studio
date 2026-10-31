@@ -1,6 +1,6 @@
 # Status pengujian (jujur)
 
-Terakhir diperbarui: 2026-10-29, versi 0.3.1.
+Terakhir diperbarui: 2026-10-31, versi 0.4.0.
 
 ## Sudah diuji, dan hasilnya
 
@@ -10,10 +10,28 @@ Lingkungan: Linux x86_64, Qt 6.4.2, libobs 30.0.2 (paket Ubuntu), Xvfb (tanpa GP
 |---|---|
 | Kompilasi seluruh kode (`livestudio_core`, `LiveStudio`, `LiveStudioSmoke`) | Berhasil, tanpa galat |
 | `LiveStudio --selftest` | 21 PASS, 0 FAIL; 10 WARN (sumber khusus Windows dan perangkat tidak ada, wajar di Linux) |
-| `LiveStudioSmoke` (GUI nyata, 24 pemeriksaan) | 24 PASS: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
+| `LiveStudioSmoke` (GUI nyata, 60 pemeriksaan) | 60 PASS, 0 FAIL (lihat rincian fitur 0.4.0 di bawah). Mencakup: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
 
 Artinya logika inti (engine libobs, scene, transisi, teks/video/gambar/warna, mixer, lower third,
 bumper, alur shutdown) berjalan pada libobs sungguhan.
+
+## Fitur baru 0.4.0 dan hasil uji di Linux (libobs 30.0.2, Xvfb)
+
+| Fitur | Diuji | Hasil |
+|---|---|---|
+| Pemutar video: Putar/Jeda, Ulang, Stop, geser (seek), waktu "posisi / durasi", Ulangi | tombol/aksi panel pada video 12 dtk | PASS: durasi terbaca, PLAYING, PAUSED (posisi diam saat jeda), lanjut, seek ke 0:08, restart |
+| Video baru berada di frame awal (cue) sampai tombol Putar ditekan | otomatis | PASS |
+| Audio: video otomatis mode Dengar (monitor + output), tombol Dengar per sumber, filter (Penguat, Kompresor), offset sinkron | tombol/aksi strip | PASS untuk keadaan dan pemasangan filter; **bunyi di speaker tidak dapat diuji di sini** (tanpa perangkat audio) |
+| Tata letak otomatis: Dua kolom, PiP (juga Layar penuh, Pembicara + slide) | posisi item dibaca ulang | PASS untuk Dua kolom dan PiP; dua lainnya belum diuji |
+| Rekam (x264 + AAC, .mkv) | rekam 3 dtk, `ffprobe` | PASS: durasi ~3 dtk, trek video dan audio ada |
+| Siaran RTMP | (a) tolak bila kunci kosong, (b) server mati dilaporkan gagal, (c) siaran ke penerima RTMP lokal (`ffmpeg -listen`) | PASS ketiganya, termasuk data diterima dan terbaca `ffprobe`. Belum diuji ke YouTube/Facebook/Twitch |
+| Bar status: REC/LIVE, waktu, kbps, frame drop, FPS, CPU | tampil di tangkapan layar | Tampil; angka kbps/drop tidak diverifikasi akurat |
+
+Temuan saat menguji: `obs_output_release` hang bila `obs_output_force_stop` dipanggil pada output yang sudah
+berhenti; sudah diperbaiki (hanya force-stop output yang aktif).
+
+**Belum diverifikasi di Windows** untuk fitur 0.4.0: apakah suara terdengar di speaker (butuh
+perangkat monitoring WASAPI), x264 dan ffmpeg_muxer dari build OBS 32.2.2 termuat, dan tampilan baru.
 
 ## Hasil nyata di Windows (dilaporkan pengguna)
 
@@ -34,8 +52,11 @@ bumper, alur shutdown) berjalan pada libobs sungguhan.
 - Tampilan visual sebenarnya (render GPU Direct3D 11), kualitas gambar, sinkron audio-video.
 - Pemilihan monitor / proyektor pada konfigurasi multi-monitor sungguhan.
 - Kinerja (CPU/GPU) pada sesi panjang, stabilitas berjam-jam.
-- Siaran/rekaman: Live Studio **belum** memiliki output streaming (RTMP) maupun rekaman.
-  Itu fitur berikutnya, bukan bagian dari daftar saat ini.
+- Encoder hardware (NVENC/AMD/QSV) belum ada; hanya x264 (CPU).
+- Kunci siaran yang diingat disimpan tanpa enkripsi di pengaturan pengguna.
+- Seek pada video mendarat di keyframe terdekat sebelum posisi yang diminta (perilaku libobs); pada
+  video dengan keyframe jarang, posisi bisa meleset beberapa detik.
+- Hotkey dapat diubah pengguna belum ada (hanya pintasan tetap).
 
 ## Risiko yang diketahui pada build Windows
 

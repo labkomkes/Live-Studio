@@ -40,6 +40,10 @@ public:
 	QString sourceName() const;
 	void tick(); // dipanggil timer UI untuk memperbarui meter
 	float magnitudeDb() const { return mag_.load(); } // untuk uji
+	bool monitoring() const;
+	void setMonitoring(bool on);
+	bool hasFilter(const QString &id) const;
+	bool toggleFilter(const QString &id, bool on);
 
 private:
 	static void volmeterCb(void *param, const float magnitude[MAX_AUDIO_CHANNELS],
@@ -52,6 +56,8 @@ private:
 	QSlider *fader_;
 	QLabel *dbLabel_;
 	QToolButton *mute_;
+	QToolButton *monitor_;
+	QToolButton *filters_;
 	std::atomic<float> mag_{-100.f};
 	std::atomic<float> peak_{-100.f};
 };

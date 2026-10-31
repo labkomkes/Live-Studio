@@ -15,7 +15,10 @@ sedikit panel) dan **Profesional** (semua panel).
 | Preview → Program, **CUT** / **TAKE** (Cut, Fade, Swipe, Slide, Fade ke Warna) | `src/core/SceneManager.*` |
 | Sumber: kamera (dshow), layar, jendela, video, gambar, teks, mikrofon, audio desktop | `src/core/SourceFactory.*` |
 | Preview & Program memakai `obs_display` | `src/ui/ObsDisplayWidget.*`, `Render.*` |
-| Audio mixer (meter, mute, volume) | `src/ui/AudioMixerWidget.*` |
+| Audio mixer (meter, mute, volume, Dengar, filter) dan pengaturan audio | `src/ui/AudioMixerWidget.*`, `AudioSettingsDialog.*` |
+| Pemutar video (putar/jeda/ulang/seek/waktu) | `src/ui/MediaPanel.*` |
+| Rekam & siaran RTMP (x264 + AAC) | `src/core/OutputManager.*`, `src/ui/OutputDialog.*` |
+| Tata letak otomatis sumber | `SceneManager::applyLayout` |
 | Lower third | `src/core/LowerThird.*`, `src/ui/LowerThirdPanel.*` |
 | Bumper webinar (putar video bumper lalu kembali ke scene sebelumnya) | `src/core/Bumper.*`, `src/ui/BumperPanel.*` |
 | **Deck ala vMix**: tile scene dengan thumbnail live, CUT/TAKE per tile, tombol transisi | `src/ui/DeckStrip.*`, `DeckLayout.h`, `Render.cpp` |

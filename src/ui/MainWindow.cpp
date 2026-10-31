@@ -3,9 +3,13 @@
 #include "../core/Bumper.h"
 #include "../core/LowerThird.h"
 #include "../core/ObsEngine.h"
+#include "../core/OutputManager.h"
 #include "../core/SceneManager.h"
 #include "../core/SourceFactory.h"
 #include "AudioMixerWidget.h"
+#include "AudioSettingsDialog.h"
+#include "MediaPanel.h"
+#include "OutputDialog.h"
 #include "BumperPanel.h"
 #include "DeckStrip.h"
 #include "LowerThirdPanel.h"
@@ -44,9 +48,15 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTextEdit>
+#include <QTimer>
 #include <QToolButton>
+#include <QElapsedTimer>
+#include <QDateTime>
+
+#include <util/platform.h>
 #include <QVBoxLayout>
 
 namespace ls {
@@ -65,9 +75,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 	lt_->ensureItems();
 	bumper_ = new Bumper(sm_, this);
 
+	out_ = new OutputManager(this);
 	buildSourceMenu();
 	buildUi();
 	buildMenus();
+	buildStatusBar();
 	connectSignals();
 
 	QSettings s("LiveStudio", "LiveStudio");
@@ -96,6 +108,14 @@ MainWindow::~MainWindow()
 	if (deckStrip_)
 		deckStrip_->destroyDisplay();
 	render::releaseGraphicsResources();
+	if (statTimer_)
+		statTimer_->stop();
+	if (out_)
+		out_->shutdown();
+	if (cpuInfo_)
+		os_cpu_usage_info_destroy(static_cast<os_cpu_usage_info_t *>(cpuInfo_));
+	if (media_)
+		media_->clear();
 	if (audio_)
 		audio_->clear();
 	if (bumper_)
@@ -106,6 +126,17 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent *e)
 {
+	if (out_ && (out_->streaming() || out_->recording())) {
+		const auto r = QMessageBox::question(this, "Live Studio",
+						     "Siaran atau rekaman masih berjalan. Hentikan dan keluar?");
+		if (r != QMessageBox::Yes) {
+			e->ignore();
+			return;
+		}
+		out_->stopStreaming();
+		out_->stopRecording();
+		out_->shutdown();
+	}
 	QSettings s("LiveStudio", "LiveStudio");
 	s.setValue("window/geometry", saveGeometry());
 	s.setValue("ui/pro", pro_);
@@ -339,7 +370,20 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 		auto *up = miniBtn("↑", "Naikkan lapisan", w);
 		auto *down = miniBtn("↓", "Turunkan lapisan", w);
 		auto *rm = miniBtn("Hapus", "Hapus sumber terpilih", w);
+		auto *layoutBtn = new QToolButton(w);
+		layoutBtn->setObjectName("miniBtn");
+		layoutBtn->setText("Tata letak ▾");
+		layoutBtn->setPopupMode(QToolButton::InstantPopup);
+		layoutBtn->setToolTip("Susun otomatis semua sumber video di scene Preview");
+		auto *layoutMenu = new QMenu(layoutBtn);
+		for (const QString &name : SceneManager::availableLayouts())
+			layoutMenu->addAction(name, this, [this, name] {
+				if (!sm_->applyLayout(editedScene(), name))
+					statusBar()->showMessage("Tidak ada sumber video di scene ini untuk ditata.", 4000);
+			});
+		layoutBtn->setMenu(layoutMenu);
 		btns->addWidget(addBtn, 1);
+		btns->addWidget(layoutBtn);
 		btns->addWidget(up);
 		btns->addWidget(down);
 		btns->addWidget(rm);
@@ -389,7 +433,9 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 	};
 	ltPanel_ = new LowerThirdPanel(lt_);
 	bumperPanel_ = new BumperPanel(bumper_, sm_);
+	media_ = new MediaPanel();
 	toolsTabs_->addTab(scrolled(ltPanel_), "Lower Third");
+	toolsTabs_->addTab(scrolled(media_), "Pemutar Video");
 	toolsTabs_->addTab(scrolled(bumperPanel_), "Bumper");
 
 	lay->addWidget(scenesPanel_, 3);
@@ -488,6 +534,8 @@ void MainWindow::buildMenus()
 		statusBar()->showMessage(sm_->save() ? "Koleksi scene disimpan." : "Gagal menyimpan koleksi.", 4000);
 	});
 	file->addAction("Pengaturan video…", this, &MainWindow::chooseVideoSettings);
+	file->addAction("Pengaturan output (rekam && siaran)…", this, [this] { OutputDialog(this).exec(); });
+	file->addAction("Pengaturan audio…", this, [this] { AudioSettingsDialog(this).exec(); });
 	file->addSeparator();
 	file->addAction("Keluar", this, &QWidget::close);
 
@@ -517,6 +565,13 @@ void MainWindow::buildMenus()
 	outMenu->addMenu(previewOutMenu_);
 	outMenu->addMenu(multiviewMenu_);
 	outputBtn_->setMenu(outMenu);
+
+	QMenu *prod = menuBar()->addMenu("&Produksi");
+	prod->addAction("Mulai / Hentikan Rekaman", QKeySequence("Ctrl+R"), this, [this] { toggleRecording(); });
+	prod->addAction("Mulai / Hentikan Siaran", QKeySequence("Ctrl+L"), this, [this] { toggleStreaming(); });
+	prod->addSeparator();
+	prod->addAction("Pemutar video: Putar / Jeda", QKeySequence("Ctrl+P"), this, [this] { media_->playPause(); });
+	prod->addAction("Pemutar video: Ulang dari awal", QKeySequence("Ctrl+Shift+P"), this, [this] { media_->restart(); });
 
 	QMenu *help = menuBar()->addMenu("&Bantuan");
 	help->addAction("Tentang Live Studio", this, &MainWindow::showAbout);
@@ -599,6 +654,7 @@ void MainWindow::connectSignals()
 		if (scene == sm_->previewName())
 			refreshItems();
 		audio_->refresh(); // sumber audio baru/dihapus (dari mana pun asalnya)
+		media_->refresh();
 	});
 
 	connect(scenesList_, &QListWidget::itemClicked, this,
@@ -712,7 +768,7 @@ void MainWindow::applyMode(bool pro)
 	// Mode Sederhana: monitor + deck + audio + lower third. Mode Profesional: tambah daftar Adegan, Sumber, Bumper, Multiview.
 	scenesPanel_->setVisible(pro);
 	sourcesPanel_->setVisible(pro);
-	toolsTabs_->setTabVisible(1, pro);
+	toolsTabs_->setTabVisible(2, pro);
 	if (!pro)
 		toolsTabs_->setCurrentIndex(0);
 	multiviewMenu_->menuAction()->setVisible(pro);
@@ -801,7 +857,7 @@ void MainWindow::addSourceOfKind(SourceKind kind)
 							       "Video (*.mp4 *.mov *.mkv *.webm *.avi);;Semua file (*)");
 		if (f.isEmpty())
 			return;
-		Data d = factory::mediaSettings(f, false);
+		Data d = factory::mediaSettings(f, false, true);
 		created = sm_->addSource(scene, factory::mediaId(), QFileInfo(f).completeBaseName(), d.get(), true);
 		break;
 	}
@@ -848,6 +904,11 @@ void MainWindow::addSourceOfKind(SourceKind kind)
 		return;
 	}
 	audio_->refresh();
+	media_->refresh();
+	if (kind == SourceKind::Video) {
+		media_->selectSource(created);
+		toolsTabs_->setCurrentIndex(1); // tampilkan kontrol putar
+	}
 	statusBar()->showMessage("Sumber ditambahkan ke scene Preview: " + created, 5000);
 }
 
@@ -865,6 +926,113 @@ void MainWindow::chooseVideoSettings()
 	QSettings s("LiveStudio", "LiveStudio");
 	s.setValue("video/preset", c);
 	QMessageBox::information(this, "Pengaturan video", "Tersimpan. Tutup dan buka ulang Live Studio.");
+}
+
+void MainWindow::buildStatusBar()
+{
+	auto *sb = statusBar();
+	statLabel_ = new QLabel(sb);
+	statLabel_->setObjectName("statLabel");
+	sb->addPermanentWidget(statLabel_);
+
+	auto *audioBtn = new QPushButton("Audio ⚙", sb);
+	audioBtn->setObjectName("statusBtn");
+	audioBtn->setToolTip("Pengaturan audio: perangkat monitor, mikrofon, audio desktop");
+	connect(audioBtn, &QPushButton::clicked, this, [this] { AudioSettingsDialog(this).exec(); });
+	auto *outBtn = new QPushButton("Output ⚙", sb);
+	outBtn->setObjectName("statusBtn");
+	outBtn->setToolTip("Pengaturan rekam & siaran");
+	connect(outBtn, &QPushButton::clicked, this, [this] { OutputDialog(this).exec(); });
+	recBtn_ = new QPushButton("● Rekam", sb);
+	recBtn_->setObjectName("recButton");
+	recBtn_->setToolTip("Mulai/hentikan rekaman (Ctrl+R)");
+	liveBtn_ = new QPushButton("▶ Siaran", sb);
+	liveBtn_->setObjectName("liveButton");
+	liveBtn_->setToolTip("Mulai/hentikan siaran RTMP (Ctrl+L)");
+	sb->addPermanentWidget(audioBtn);
+	sb->addPermanentWidget(outBtn);
+	sb->addPermanentWidget(recBtn_);
+	sb->addPermanentWidget(liveBtn_);
+	connect(recBtn_, &QPushButton::clicked, this, [this] { toggleRecording(); });
+	connect(liveBtn_, &QPushButton::clicked, this, [this] { toggleStreaming(); });
+
+	connect(out_, &OutputManager::recordingChanged, this, [this](bool on, const QString &info) {
+		recBtn_->setText(on ? "■ Henti Rekam" : "● Rekam");
+		recBtn_->setProperty("active", on);
+		recBtn_->style()->unpolish(recBtn_);
+		recBtn_->style()->polish(recBtn_);
+		recStartMs_ = on ? QDateTime::currentMSecsSinceEpoch() : 0;
+		statusBar()->showMessage(on ? "Merekam ke " + info : info, on ? 6000 : 10000);
+	});
+	connect(out_, &OutputManager::streamingChanged, this, [this](bool on, const QString &info) {
+		liveBtn_->setText(on ? "■ Henti Siaran" : "▶ Siaran");
+		liveBtn_->setProperty("active", on);
+		liveBtn_->style()->unpolish(liveBtn_);
+		liveBtn_->style()->polish(liveBtn_);
+		liveStartMs_ = on ? QDateTime::currentMSecsSinceEpoch() : 0;
+		lastStreamBytes_ = 0;
+		if (!on && info.contains("gagal", Qt::CaseInsensitive))
+			QMessageBox::warning(this, "Siaran", info);
+		statusBar()->showMessage(on ? "Siaran dimulai ke " + info : info, 10000);
+	});
+
+	cpuInfo_ = os_cpu_usage_info_start();
+	statTimer_ = new QTimer(this);
+	statTimer_->setInterval(1000);
+	connect(statTimer_, &QTimer::timeout, this, [this] { updateStats(); });
+	statTimer_->start();
+	updateStats();
+}
+
+void MainWindow::toggleRecording()
+{
+	if (out_->recording()) {
+		out_->stopRecording();
+		return;
+	}
+	QString err;
+	if (!out_->startRecording(&err))
+		QMessageBox::warning(this, "Rekaman", err);
+}
+
+void MainWindow::toggleStreaming()
+{
+	if (out_->streaming()) {
+		if (QMessageBox::question(this, "Siaran", "Hentikan siaran langsung sekarang?") == QMessageBox::Yes)
+			out_->stopStreaming();
+		return;
+	}
+	QString err;
+	if (!out_->startStreaming(&err)) {
+		QMessageBox::warning(this, "Siaran", err);
+		return;
+	}
+}
+
+void MainWindow::updateStats()
+{
+	auto fmt = [](qint64 ms) {
+		const qint64 s = ms / 1000;
+		return QString("%1:%2:%3").arg(s / 3600).arg((s / 60) % 60, 2, 10, QChar('0')).arg(s % 60, 2, 10, QChar('0'));
+	};
+	const qint64 now = QDateTime::currentMSecsSinceEpoch();
+	QStringList parts;
+	if (out_->recording())
+		parts << QString("REC %1 (%2 MB)").arg(fmt(now - recStartMs_)).arg(out_->recordingBytes() / (1024 * 1024));
+	if (out_->streaming()) {
+		const uint64_t b = out_->streamBytes();
+		const double kbps = double(b - lastStreamBytes_) * 8.0 / 1000.0;
+		lastStreamBytes_ = b;
+		parts << QString("LIVE %1  %2 kbps  drop %3/%4")
+				 .arg(fmt(now - liveStartMs_))
+				 .arg(int(kbps))
+				 .arg(out_->streamDropped())
+				 .arg(out_->streamTotal());
+	}
+	const double cpu = cpuInfo_ ? os_cpu_usage_info_query(static_cast<os_cpu_usage_info_t *>(cpuInfo_)) : 0.0;
+	parts << QString("%1 fps").arg(obs_get_active_fps(), 0, 'f', 1);
+	parts << QString("CPU %1%").arg(cpu, 0, 'f', 0);
+	statLabel_->setText(parts.join("   |   "));
 }
 
 void MainWindow::showAbout()

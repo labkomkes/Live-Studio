@@ -21,6 +21,7 @@ class QPushButton;
 class QSpinBox;
 class QTabWidget;
 class QToolButton;
+class QTimer;
 
 namespace ls {
 
@@ -33,6 +34,8 @@ class LowerThirdPanel;
 class BumperPanel;
 class ProjectorWindow;
 class DeckStrip;
+class MediaPanel;
+class OutputManager;
 
 class MainWindow : public QMainWindow {
 	Q_OBJECT
@@ -65,6 +68,10 @@ private:
 	void fillScreenMenu(QMenu *menu, int mode);
 	void chooseVideoSettings();
 	void showAbout();
+	void buildStatusBar();
+	void toggleRecording();
+	void toggleStreaming();
+	void updateStats();
 	QString editedScene() const; // scene yang sedang diedit = Preview
 	static QString friendlyType(const QString &typeId);
 
@@ -90,6 +97,15 @@ private:
 	AudioMixerWidget *audio_ = nullptr;
 	LowerThirdPanel *ltPanel_ = nullptr;
 	BumperPanel *bumperPanel_ = nullptr;
+	MediaPanel *media_ = nullptr;
+	OutputManager *out_ = nullptr;
+	QPushButton *recBtn_ = nullptr;
+	QPushButton *liveBtn_ = nullptr;
+	QLabel *statLabel_ = nullptr;
+	QTimer *statTimer_ = nullptr;
+	qint64 recStartMs_ = 0, liveStartMs_ = 0;
+	uint64_t lastStreamBytes_ = 0;
+	void *cpuInfo_ = nullptr;
 
 	QFrame *scenesPanel_ = nullptr;
 	QFrame *sourcesPanel_ = nullptr;
