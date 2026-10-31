@@ -42,8 +42,11 @@ Jalankan **Live Studio - Uji Mandiri**. Laporan tersimpan di `%APPDATA%\LiveStud
 - **Suara tidak keluar di komputer?** libobs hanya memutar ke speaker lewat *monitoring*. Buka **Audio ⚙**
   (bar bawah), pilih perangkat keluaran monitor, lalu pastikan tombol **Dengar** di Audio Mixer menyala untuk
   sumber itu. Video otomatis Dengar. Jangan menyalakan Dengar pada mikrofon tanpa headphone (gema).
-- **Filter audio** (tombol *Filter ▾* di tiap strip): peredam bising, noise gate, kompresor, limiter, penguat,
-  dan offset sinkron audio.
+- **Audio Mixer (0.4.2)**: tiap sumber punya meter stereo L/R berskala dB (indikator CLIP merah bila menyentuh 0 dB),
+  fader + kolom dB yang bisa diketik (klik dua kali fader = 0 dB), tombol **Mute** (menjadi merah *MUTED*),
+  **Dengar**, dan menu **⚙**: mode monitor, filter (peredam bising, noise gate, kompresor, limiter, penguat, expander),
+  paksa mono, keseimbangan kiri/kanan, offset sinkron, ganti perangkat. Bilah atas mixer: **＋ Input**, **Mute semua**,
+  tombol tampilan **Kanal/Daftar**, dan **⚙ Audio**. Batas antara monitor dan panel bawah bisa digeser untuk memperbesar mixer.
 - **Input audio & driver**: *＋ Sumber > Input Audio (pilih driver)…*: Driver Windows (WASAPI) untuk mikrofon/line-in/mixer USB,
   audio satu aplikasi, ASIO (butuh plugin ASIO pihak ketiga, lihat Plugin), atau DirectShow (kartu capture). Beberapa driver belum teruji (lihat STATUS).
 - **Plugin**: tombol **Plugin** di bar bawah (atau File > Plugin…) menampilkan plugin termuat dan membolehkan folder plugin tambahan (berlaku setelah buka ulang).

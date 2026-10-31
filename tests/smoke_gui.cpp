@@ -18,6 +18,7 @@
 
 #include <QAction>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -433,6 +434,95 @@ int main(int argc, char *argv[])
 			strip->toggleFilter("gain_filter", false);
 			expect(!strip->hasFilter("gain_filter"), "Audio: filter Penguat dilepas");
 			strip->toggleFilter("compressor_filter", false);
+		}});
+
+		// Mixer pro: fader dB, Mute (+ Mute semua), tampilan Kanal, menu pengaturan
+		steps.push_back({100, [&] {
+			AudioStrip *strip = nullptr;
+			for (auto *st : g_win->findChildren<AudioStrip *>())
+				if (st->sourceName() == "Media Uji")
+					strip = st;
+			if (!strip) {
+				expect(false, "Mixer: strip Media Uji ditemukan");
+				return;
+			}
+			strip->setVolumeDb(-12.0);
+			obs_source_t *s = obs_get_source_by_name("Media Uji");
+			const float mul = obs_source_get_volume(s);
+			expect(std::fabs(mul - 0.2512f) < 0.01f, "Mixer: fader -12 dB -> volume libobs 0.251", QString::number(mul));
+			auto *spin = strip->findChild<QDoubleSpinBox *>("dbSpin");
+			expect(spin && std::fabs(spin->value() + 12.0) < 0.05, "Mixer: kolom dB ikut berubah",
+			       spin ? QString::number(spin->value()) : "-");
+			spin->setValue(3.0); // ketik nilai dB
+			expect(std::fabs(obs_source_get_volume(s) - 1.4125f) < 0.02f, "Mixer: ketik +3 dB -> volume 1.41");
+			auto *fader = strip->findChild<FaderSlider *>("fader");
+			emit fader->resetRequested();
+			expect(std::fabs(obs_source_get_volume(s) - 1.0f) < 0.01f, "Mixer: klik dua kali fader -> 0 dB");
+
+			auto *mute = strip->findChild<QToolButton *>("muteBtn");
+			mute->click();
+			expect(obs_source_muted(s) && strip->property("muted").toBool() && mute->text() == "MUTED",
+			       "Mixer: Mute aktif (libobs + tampilan merah)");
+			obs_source_release(s);
+		}});
+		steps.push_back({500, [&] { // tunggu repaint agar tangkapan layar memperlihatkan Mute merah
+			shot("10_mixer_mute");
+			AudioStrip *strip = nullptr;
+			for (auto *st : g_win->findChildren<AudioStrip *>())
+				if (st->sourceName() == "Media Uji")
+					strip = st;
+			auto *mute = strip->findChild<QToolButton *>("muteBtn");
+			mute->click();
+			obs_source_t *s = obs_get_source_by_name("Media Uji");
+			expect(!obs_source_muted(s) && mute->text() == "Mute", "Mixer: Mute dilepas");
+			obs_source_release(s);
+		}});
+		steps.push_back({100, [&] {
+			AudioStrip *strip = nullptr;
+			for (auto *st : g_win->findChildren<AudioStrip *>())
+				if (st->sourceName() == "Media Uji")
+					strip = st;
+			// Mute semua
+			auto *mixer = g_win->findChild<AudioMixerWidget *>();
+			mixer->muteAll(true);
+			bool all = true;
+			for (auto *st : g_win->findChildren<AudioStrip *>())
+				all = all && st->muted();
+			expect(all, "Mixer: Mute semua membisukan setiap strip");
+			mixer->muteAll(false);
+
+			// Menu pengaturan
+			auto *gear = strip->findChild<QToolButton *>("stripMenu");
+			expect(gear && gear->menu() && gear->menu()->actions().size() >= 6, "Mixer: menu pengaturan sumber ada",
+			       gear && gear->menu() ? QString::number(gear->menu()->actions().size()) : "-");
+		}});
+		steps.push_back({100, [&] {
+			obs_source_t *s = obs_get_source_by_name("Media Uji");
+			obs_source_set_muted(s, true); // diubah dari luar mixer
+			obs_source_release(s);
+		}});
+		steps.push_back({600, [&] {
+			AudioStrip *strip = nullptr;
+			for (auto *st : g_win->findChildren<AudioStrip *>())
+				if (st->sourceName() == "Media Uji")
+					strip = st;
+			expect(strip && strip->findChild<QToolButton *>("muteBtn")->isChecked(),
+			       "Mixer: strip mengikuti perubahan mute dari luar");
+			obs_source_t *s = obs_get_source_by_name("Media Uji");
+			obs_source_set_muted(s, false);
+			obs_source_release(s);
+		}});
+		steps.push_back({900, [&] {
+			auto *mixer = g_win->findChild<AudioMixerWidget *>();
+			mixer->setVertical(true);
+			expect(mixer->vertical() && mixer->stripCount() >= 1, "Mixer: tampilan Kanal (vertikal) tersusun",
+			       QString::number(mixer->stripCount()));
+			if (auto *tabs = g_win->findChild<QTabWidget *>("toolsTabs"))
+				tabs->setCurrentIndex(0);
+		}});
+		steps.push_back({800, [&] {
+			shot("11_mixer_kanal");
+			g_win->findChild<AudioMixerWidget *>()->setVertical(false);
 		}});
 
 		// Tata letak

@@ -47,6 +47,7 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QShortcut>
+#include <QSplitter>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -55,6 +56,7 @@
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
+#include <algorithm>
 #include <QElapsedTimer>
 #include <QDateTime>
 
@@ -86,6 +88,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
 	QSettings s("LiveStudio", "LiveStudio");
 	restoreGeometry(s.value("window/geometry").toByteArray());
+	if (s.contains("window/split"))
+		mainSplit_->restoreState(s.value("window/split").toByteArray());
 	applyMode(s.value("ui/pro", false).toBool());
 
 	refreshScenes();
@@ -141,6 +145,7 @@ void MainWindow::closeEvent(QCloseEvent *e)
 	}
 	QSettings s("LiveStudio", "LiveStudio");
 	s.setValue("window/geometry", saveGeometry());
+	s.setValue("window/split", mainSplit_->saveState());
 	s.setValue("ui/pro", pro_);
 	sm_->save();
 	for (auto &p : projectors_)
@@ -244,10 +249,22 @@ void MainWindow::buildUi()
 	monitors->addWidget(previewBox, 1);
 	monitors->addLayout(center, 0);
 	monitors->addWidget(programBox, 1);
-	root->addLayout(monitors, 1);
-
+	// Monitor dan panel dipisah splitter agar tinggi panel (mixer) bisa diatur operator.
+	auto *monitorsWrap = new QWidget(central);
+	monitorsWrap->setLayout(monitors);
+	monitors->setContentsMargins(0, 0, 0, 0);
+	monitorsWrap->setMinimumHeight(190);
+	mainSplit_ = new QSplitter(Qt::Vertical, central);
+	mainSplit_->setObjectName("mainSplit");
+	mainSplit_->setChildrenCollapsible(false);
+	mainSplit_->setHandleWidth(6);
+	mainSplit_->addWidget(monitorsWrap);
 	// --- Baris 2: panel Adegan | Sumber | Audio | Lower Third/Bumper ---
-	root->addWidget(buildPanels(central), 0);
+	mainSplit_->addWidget(buildPanels(central));
+	mainSplit_->setStretchFactor(0, 1);
+	mainSplit_->setStretchFactor(1, 0);
+	mainSplit_->setSizes({380, 290});
+	root->addWidget(mainSplit_, 1);
 
 	// --- Baris 3 (gaya vMix): deck ---
 	root->addWidget(buildDeck(central), 0);
@@ -260,7 +277,7 @@ void MainWindow::buildUi()
 QWidget *MainWindow::buildPanels(QWidget *parent)
 {
 	auto *row = new QWidget(parent);
-	row->setFixedHeight(206);
+	row->setMinimumHeight(200);
 	auto *lay = new QHBoxLayout(row);
 	lay->setContentsMargins(0, 0, 0, 0);
 	lay->setSpacing(6);
@@ -422,6 +439,14 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 	// --- Audio Mixer ---
 	audio_ = new AudioMixerWidget(row);
 	QFrame *audioPanel = makePanel("Audio Mixer", audio_);
+	connect(audio_, &AudioMixerWidget::openSettingsRequested, this, [this] { AudioSettingsDialog(this).exec(); });
+	// Tampilan Kanal butuh tinggi lebih: beri ruang pada panel di splitter.
+	connect(audio_, &AudioMixerWidget::viewModeChanged, this, [this](bool vertical) {
+		const int total = mainSplit_->height();
+		const int panel = vertical ? 360 : 260;
+		mainSplit_->setSizes({std::max(190, total - panel), panel});
+	});
+	connect(audio_, &AudioMixerWidget::addInputRequested, this, [this] { addSourceOfKind(SourceKind::Mic); });
 
 	// --- Lower Third / Bumper (tab) ---
 	toolsTabs_ = new QTabWidget(row);

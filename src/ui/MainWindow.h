@@ -22,6 +22,7 @@ class QSpinBox;
 class QTabWidget;
 class QToolButton;
 class QTimer;
+class QSplitter;
 
 namespace ls {
 
@@ -114,6 +115,7 @@ private:
 	QFrame *scenesPanel_ = nullptr;
 	QFrame *sourcesPanel_ = nullptr;
 	QTabWidget *toolsTabs_ = nullptr;
+	QSplitter *mainSplit_ = nullptr;
 
 	QMenu *addSourceMenu_ = nullptr;
 	QMenu *multiviewMenu_ = nullptr;

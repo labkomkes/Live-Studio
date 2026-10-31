@@ -1,6 +1,6 @@
 # Status pengujian (jujur)
 
-Terakhir diperbarui: 2026-10-31, versi 0.4.1.
+Terakhir diperbarui: 2026-10-31, versi 0.4.2.
 
 ## Sudah diuji, dan hasilnya
 
@@ -10,7 +10,7 @@ Lingkungan: Linux x86_64, Qt 6.4.2, libobs 30.0.2 (paket Ubuntu), Xvfb (tanpa GP
 |---|---|
 | Kompilasi seluruh kode (`livestudio_core`, `LiveStudio`, `LiveStudioSmoke`) | Berhasil, tanpa galat |
 | `LiveStudio --selftest` | 21 PASS, 0 FAIL; 10 WARN (sumber khusus Windows dan perangkat tidak ada, wajar di Linux) |
-| `LiveStudioSmoke` (GUI nyata, 60 pemeriksaan) | 69 PASS, 0 FAIL (lihat rincian fitur 0.4.0/0.4.1 di bawah). Mencakup: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
+| `LiveStudioSmoke` (GUI nyata, 60 pemeriksaan) | 79 PASS, 0 FAIL (lihat rincian fitur 0.4.0-0.4.2 di bawah). Mencakup: awal Program/Preview, **CUT**, **TAKE**, **deck** (klik tile, CUT/TAKE per tile, pilih transisi), buka Multiview, lower third tampil/sembunyi, strip mixer muncul/hilang, meter bergerak, **Mute**, bumper tayang lalu kembali |
 
 Artinya logika inti (engine libobs, scene, transisi, teks/video/gambar/warna, mixer, lower third,
 bumper, alur shutdown) berjalan pada libobs sungguhan.
@@ -30,6 +30,9 @@ bumper, alur shutdown) berjalan pada libobs sungguhan.
 | Deck: tombol Program / Preview / Multiview ke monitor, penanda ● aktif, menu Tutup | simulasi klik menu | PASS (jendela terbuka, penanda, tutup). Penempatan di monitor ke-2 sungguhan belum diuji |
 | Dialog Input Audio dengan pilihan driver (WASAPI, per-aplikasi, ASIO, DirectShow) | dialog dibuka | PASS: daftar driver tampil; di Linux semua driver Windows tampil "tidak tersedia" sehingga **pemilihan perangkat per driver belum teruji**. ASIO butuh plugin pihak ketiga yang tidak disertakan; DirectShow audio-only dan per-aplikasi belum diuji |
 | Dialog Plugin: daftar modul termuat + folder plugin tambahan | dialog dibuka | PASS untuk daftar; pemuatan plugin dari folder tambahan belum diuji |
+
+| Mixer 0.4.2: fader dB (-60..+12) + kolom dB yang bisa diketik, klik dua kali = 0 dB, Mute merah (MUTED) + strip meredup, Mute semua, tampilan Daftar/Kanal, menu ⚙ per sumber (mode monitor, filter, mono, balance, sinkron, ganti perangkat) | otomatis lewat widget | PASS untuk fader, kolom dB, Mute (libobs + tampilan), Mute semua, mengikuti perubahan dari luar, pindah tampilan Kanal, menu ada. Isi menu (balance, mono, ganti perangkat, filter expander) **belum diklik/diuji**; meter stereo L/R diuji hanya secara visual di Linux |
+| Panel bawah bisa diubah tingginya (splitter), tersimpan | tangkapan layar | Tampil; penyimpanan ukuran belum diuji |
 
 Temuan saat menguji: `obs_output_release` hang bila `obs_output_force_stop` dipanggil pada output yang sudah
 berhenti; sudah diperbaiki (hanya force-stop output yang aktif).

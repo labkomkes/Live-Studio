@@ -42,3 +42,7 @@ mencakup tampilan visual, kualitas kamera, level audio nyata, maupun multi-monit
 | 35 | Audio per aplikasi | Driver "Audio dari satu aplikasi" > pilih aplikasi yang sedang bunyi | Meter bergerak hanya untuk aplikasi itu | |
 | 36 | ASIO | Pasang plugin ASIO di folder tambahan, buka ulang | Driver ASIO tersedia & perangkat muncul | |
 | 37 | Output di deck | Deck > Program ▾ > Monitor 2 | Program layar penuh di monitor 2; ● menyala; pindah/tutup bekerja | |
+| 38 | Mute | Mic/video > Mute | Berubah merah MUTED, suara/meter di siaran hilang; Mute semua bekerja | |
+| 39 | Fader dB | Geser fader, ketik -10 di kolom dB, klik dua kali fader | Volume berubah; kembali 0 dB | |
+| 40 | Menu ⚙ | Coba mode monitor, mono, balance, ganti perangkat | Setiap opsi berpengaruh | |
+| 41 | Tampilan Kanal | Tombol Kanal di mixer | Fader vertikal, panel membesar | |
