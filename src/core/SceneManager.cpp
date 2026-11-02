@@ -587,8 +587,55 @@ bool SceneManager::removeItem(const QString &scene, const QString &name)
 	// ini melepas sumber dari daftar global sehingga mixer audio tidak menahannya.
 	SourceRef src = SourceRef::borrow(obs_sceneitem_get_source(item));
 	obs_sceneitem_remove(item);
-	if (src && !QString::fromUtf8(obs_source_get_name(src.get())).startsWith("LS "))
+	bool usedElsewhere = false;
+	if (src) {
+		const QString sn = QString::fromUtf8(obs_source_get_name(src.get()));
+		for (const QString &other : sceneNames())
+			if (other != scene)
+				for (const ItemInfo &it : items(other))
+					if (it.name == sn)
+						usedElsewhere = true;
+	}
+	if (src && !usedElsewhere && !QString::fromUtf8(obs_source_get_name(src.get())).startsWith("LS "))
 		obs_source_remove(src.get());
+	emit itemsChanged(scene);
+	return true;
+}
+
+QList<SceneManager::ItemInfo> SceneManager::allSources() const
+{
+	QList<ItemInfo> out;
+	QStringList seen;
+	for (const QString &sc : sceneNames())
+		for (const ItemInfo &it : items(sc))
+			if (!seen.contains(it.name)) {
+				seen << it.name;
+				out << it;
+			}
+	return out;
+}
+
+bool SceneManager::addExistingSource(const QString &scene, const QString &sourceName)
+{
+	SourceRef sc = findScene(scene);
+	if (!sc)
+		return false;
+	obs_source_t *src = obs_get_source_by_name(sourceName.toUtf8().constData());
+	if (!src)
+		return false;
+	obs_scene_t *os = obs_scene_from_source(sc.get());
+	if (obs_scene_find_source(os, sourceName.toUtf8().constData())) { // sudah ada di scene ini
+		obs_source_release(src);
+		return false;
+	}
+	obs_sceneitem_t *item = obs_scene_add(os, src);
+	const uint32_t flags = obs_source_get_output_flags(src);
+	obs_source_release(src);
+	if (!item)
+		return false;
+	if (flags & OBS_SOURCE_VIDEO)
+		fitItemToCanvas(item);
+	ensureOverlayOnTop(scene);
 	emit itemsChanged(scene);
 	return true;
 }

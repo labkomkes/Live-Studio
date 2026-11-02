@@ -57,6 +57,8 @@ private:
 	enum class SourceKind { Webcam, Screen, Window, Video, Image, Text, Mic, DesktopAudio };
 
 	void buildSourceMenu();
+	void openAddSourceDialog();
+	void createZoomScene();
 	void buildUi();
 	QWidget *buildPanels(QWidget *parent);
 	QWidget *buildDeck(QWidget *parent);

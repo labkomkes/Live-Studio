@@ -21,6 +21,7 @@ QString textId()
 QString colorId() { return ObsEngine::resolveId("color_source"); }
 QString micId() { return ObsEngine::resolveId("wasapi_input_capture"); }
 QString desktopAudioId() { return ObsEngine::resolveId("wasapi_output_capture"); }
+QString appAudioId() { return ObsEngine::resolveId("wasapi_process_output_capture"); }
 
 uint32_t toObsColor(const QColor &c, int alpha)
 {
@@ -57,6 +58,29 @@ Data windowSettings(const QString &windowValue)
 	Data d;
 	obs_data_set_string(d.get(), "window", windowValue.toUtf8().constData());
 	obs_data_set_bool(d.get(), "cursor", true);
+	return d;
+}
+
+// Nilai "window" libobs = "Judul:Kelas:Exe" (dipisah ':' dengan ':' di dalam nama di-escape '#3A').
+const QString kZoomAutoWindow = "Zoom Meeting:ZPContentViewWndClass:Zoom.exe";
+
+Data zoomWindowSettings(const QString &windowValue)
+{
+	Data d;
+	obs_data_set_string(d.get(), "window",
+			    (windowValue.isEmpty() ? kZoomAutoWindow : windowValue).toUtf8().constData());
+	obs_data_set_int(d.get(), "priority", windowValue.isEmpty() ? 1 : 0); // 1 = cocokkan kelas jendela, 0 = judul
+	obs_data_set_int(d.get(), "method", 2);                              // Windows Graphics Capture (Zoom memakai GPU)
+	obs_data_set_bool(d.get(), "cursor", false);
+	return d;
+}
+
+Data appAudioSettings(const QString &windowValue)
+{
+	Data d;
+	obs_data_set_string(d.get(), "window",
+			    (windowValue.isEmpty() ? kZoomAutoWindow : windowValue).toUtf8().constData());
+	obs_data_set_int(d.get(), "priority", windowValue.isEmpty() ? 1 : 0);
 	return d;
 }
 

@@ -74,3 +74,11 @@ Jalankan **Live Studio - Uji Mandiri**. Laporan tersimpan di `%APPDATA%\LiveStud
   adegan berbeda, Program, atau Preview. Pilih monitor/prosesor LED lalu **Buka**; **Esc** menutup. Centang
   **Pola uji** untuk kalibrasi. Layout tersimpan otomatis dan bisa disimpan/dimuat sebagai JSON.
 - Catatan jujur: fitur ini diuji otomatis di Linux, **belum** diuji di Windows/monitor LED sungguhan.
+
+## Pengaturan, galeri sumber, dan Zoom (0.6.0)
+
+- **Pengaturan:** menu File > Pengaturan (Ctrl+,) atau tombol Audio/Plugin/Output di bawah. Sidebar: Output, Audio, Video, Plugin.
+- **Tambah sumber:** tombol Sumber ▾ > "Galeri sumber…" untuk tampilan grid; "Baru Dibuat" + "Tambah yang sudah ada" memakai ulang sumber yang sama di scene lain.
+- **Scene Zoom:** Produksi > Scene Zoom… . Jalankan Zoom di PC ini dan mulai/gabung rapat; scene menangkap jendela rapat dan audio Zoom.
+  Pakai headset agar tidak ada gema. Bila gambar kosong, buat ulang scene dan pilih jendela Zoom secara manual.
+  Catatan jujur: belum diuji dengan Zoom sungguhan (hanya diuji di Linux tanpa Zoom).

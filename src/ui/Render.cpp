@@ -10,6 +10,7 @@
 #include <obs.h>
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <mutex>
 #include <string>
@@ -339,19 +340,44 @@ void drawPreviewEditor(SceneManager *sm, uint32_t cx, uint32_t cy, const EditorV
 	if (v.snapY)
 		fillRect(ox, oy + v.snapYPos * scale, bw * scale, 1.f, 0xFFFFD84A);
 
+	const uint32_t RED = 0xFF0000FF; // ABGR: merah murni seperti OBS
+	float ex = 0, ey = 0, ew = 0, eh = 0;
 	if (v.hasSel) {
 		const float x = ox + v.x * scale, y = oy + v.y * scale, w = v.w * scale, h = v.h * scale;
-		drawOutline(x, y, w, h, 0xFF3B3BFF, 2);
+		ex = x, ey = y, ew = w, eh = h;
+		// garis jarak dari tengah tiap sisi kotak ke tepi kanvas (ala OBS)
+		const float cl = ox, cr = ox + bw * scale, ct = oy, cb = oy + bh * scale;
+		fillRect(std::min(cl, x), y + h / 2.f - 1.f, std::abs(x - cl), 2.f, RED);
+		fillRect(std::min(cr, x + w), y + h / 2.f - 1.f, std::abs(cr - (x + w)), 2.f, RED);
+		fillRect(x + w / 2.f - 1.f, std::min(ct, y), 2.f, std::abs(y - ct), RED);
+		fillRect(x + w / 2.f - 1.f, std::min(cb, y + h), 2.f, std::abs(cb - (y + h)), RED);
+		drawOutline(x, y, w, h, RED, 2);
 		const float hx[8] = {x, x + w / 2, x + w, x + w, x + w, x + w / 2, x, x};
 		const float hy[8] = {y, y, y, y + h / 2, y + h, y + h, y + h, y + h / 2};
 		for (int i = 0; i < 8; ++i) {
-			const float s = (i == v.hoverHandle) ? 11.f : 9.f;
-			fillRect(hx[i] - s / 2, hy[i] - s / 2, s, s, i == v.hoverHandle ? 0xFF3B3BFF : 0xFFFFFFFF);
-			drawOutline(hx[i] - s / 2, hy[i] - s / 2, s, s, 0xFF3B3BFF, 1);
+			const float sz = (i == v.hoverHandle) ? 11.f : 9.f;
+			fillRect(hx[i] - sz / 2, hy[i] - sz / 2, sz, sz, RED);
 		}
 	}
 	gs_projection_pop();
 	gs_viewport_pop();
+	if (v.hasSel) {
+		// label jarak "N px" di tengah tiap garis (hanya bila garis cukup panjang)
+		const float x = ex, y = ey, w = ew, h = eh;
+		const float cl = ox, cr = ox + bw * scale, ct = oy, cb = oy + bh * scale;
+		auto label = [&](float val, float lx, float ly) {
+			const std::string t = std::to_string(int(std::lround(val))) + " px";
+			drawTextIn(t, lx - 36.f, ly - 9.f, 72.f, 18.f, true, 0.9f);
+		};
+		if (std::abs(x - cl) > 60.f)
+			label(v.x, (cl + x) / 2.f, y + h / 2.f - 14.f);
+		if (std::abs(cr - (x + w)) > 60.f)
+			label(bw - v.x - v.w, (cr + x + w) / 2.f, y + h / 2.f - 14.f);
+		if (std::abs(y - ct) > 30.f)
+			label(v.y, x + w / 2.f + 44.f, (ct + y) / 2.f);
+		if (std::abs(cb - (y + h)) > 30.f)
+			label(bh - v.y - v.h, x + w / 2.f + 44.f, (cb + y + h) / 2.f);
+	}
 }
 
 void drawLed(SceneManager *sm, const LedLayout &L, uint32_t cx, uint32_t cy)

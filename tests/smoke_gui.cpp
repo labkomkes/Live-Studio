@@ -42,9 +42,16 @@
 #include <QTableWidget>
 #include <QSettings>
 #include <QTimer>
+#include <QMenuBar>
+#include <QCheckBox>
+#include <QListWidget>
 
 #include <cstdio>
 
+#include "../src/ui/AddSourceDialog.h"
+#include "../src/ui/ZoomDialog.h"
+#include "../src/ui/SettingsDialog.h"
+#include "../src/core/SourceFactory.h"
 #include <obs.h>
 #include <functional>
 
@@ -923,6 +930,130 @@ int main(int argc, char *argv[])
 		printf("       driver: %s\n", qPrintable(labels.join(" ; ")));
 		PluginsDialog pd;
 		expect(pd.moduleCount() > 3, "Plugin: daftar modul termuat", QString::number(pd.moduleCount()));
+	}});
+
+	// ---- 0.6.0: kotak merah + jarak, galeri Tambah Sumber, Scene Zoom, Pengaturan bersidebar ----
+	steps.push_back({300, [&] {
+		auto *sm = g_win->sceneManager();
+		const QString sc = sm->previewName();
+		const auto its = sm->items(sc);
+		expect(!its.isEmpty(), "Editor: preview punya item untuk dipilih");
+		if (!its.isEmpty()) {
+			sm->setItemRect(sc, its.first().name, {300.f, 120.f, 640.f, 360.f}); // kotak di dalam kanvas -> jarak tampak
+			sm->selectItem(its.first().name);
+		}
+	}});
+	steps.push_back({800, [&] { shot("16_editor_jarak"); }});
+
+	static AddSourceDialog *addDlg = nullptr;
+	steps.push_back({100, [&] {
+		auto *sm = g_win->sceneManager();
+		const QString a = sm->createScene("Galeri A");
+		const QString b = sm->createScene("Galeri B");
+		Data d = factory::colorSettings(QColor(200, 30, 30), 640, 360);
+		const QString src = sm->addSource(a, factory::colorId(), "Warna Uji", d.get(), true);
+		expect(src == "Warna Uji", "Galeri: sumber dibuat", src);
+		addDlg = new AddSourceDialog(sm, g_win);
+		addDlg->show();
+		auto *cats = addDlg->findChild<QListWidget *>("addCatList");
+		auto *tiles = addDlg->findChild<QListWidget *>("addTileList");
+		expect(cats && cats->count() == 10, "Galeri: 10 kategori (Baru Dibuat + 9 tipe)", cats ? QString::number(cats->count()) : "-");
+		cats->setCurrentRow(0);
+		bool found = false;
+		for (int i = 0; i < tiles->count(); ++i)
+			found |= tiles->item(i)->text() == "Warna Uji";
+		expect(found, "Galeri: 'Baru Dibuat' menampilkan sumber yang sudah ada");
+		cats->setCurrentRow(5); // Gambar -> ada tile "＋ Baru"
+		expect(tiles->count() >= 1 && tiles->item(0)->text().contains("Baru"), "Galeri: kategori punya tile '＋ Baru'");
+		cats->setCurrentRow(0);
+		for (int i = 0; i < tiles->count(); ++i)
+			if (tiles->item(i)->text() == "Warna Uji")
+				tiles->setCurrentRow(i);
+		auto *btn = addDlg->findChild<QPushButton *>("addExistingBtn");
+		expect(btn && btn->isEnabled(), "Galeri: 'Tambah yang sudah ada' aktif untuk sumber terpilih");
+		btn->click();
+		expect(addDlg->newKind() == -1 && addDlg->existingName() == "Warna Uji", "Galeri: hasil = sumber yang sudah ada");
+		addDlg->show(); // tampilkan lagi untuk tangkapan layar
+		cats->setCurrentRow(0);
+		expect(sm->addExistingSource(b, "Warna Uji"), "Galeri: sumber sama ditambah ke scene lain");
+		expect(!sm->addExistingSource(b, "Warna Uji"), "Galeri: tidak menggandakan di scene yang sama");
+		sm->removeItem(a, "Warna Uji");
+		ls::SourceRef chk{obs_get_source_by_name("Warna Uji")};
+		expect(chk.get() != nullptr, "Galeri: menghapus dari satu scene tidak merusak scene lain");
+		sm->removeItem(b, "Warna Uji");
+		expect(chk.get() && obs_source_removed(chk.get()), "Galeri: sumber ditandai dilepas setelah tidak dipakai scene mana pun");
+	}});
+	steps.push_back({900, [&] {
+		shot("17_tambah_sumber");
+		addDlg->close();
+		delete addDlg;
+		addDlg = nullptr;
+	}});
+
+	steps.push_back({100, [&] {
+		auto zs = factory::zoomWindowSettings("");
+		expect(QString::fromUtf8(obs_data_get_string(zs.get(), "window")) == "Zoom Meeting:ZPContentViewWndClass:Zoom.exe",
+		       "Zoom: jendela otomatis = kelas ZPContentViewWndClass, Zoom.exe");
+		expect(obs_data_get_int(zs.get(), "priority") == 1 && obs_data_get_int(zs.get(), "method") == 2,
+		       "Zoom: cocok berdasar kelas + Windows Graphics Capture");
+		auto za = factory::appAudioSettings("");
+		expect(QString::fromUtf8(obs_data_get_string(za.get(), "window")).contains("Zoom.exe"), "Zoom: audio per aplikasi menunjuk Zoom.exe");
+		ZoomDialog zd;
+		expect(zd.sceneName() == "Zoom" && zd.windowValue().isEmpty() && zd.captureAudio() && !zd.addMic(),
+		       "Zoom: dialog bawaan (nama Zoom, otomatis, audio aktif, mic mati)");
+		QAction *act = nullptr;
+		for (QAction *a : g_win->findChildren<QAction *>())
+			if (a->text().startsWith("Scene Zoom"))
+				act = a;
+		expect(act != nullptr, "Zoom: menu Produksi > Scene Zoom ada");
+		QTimer::singleShot(400, [] {
+			if (auto *w = QApplication::activeModalWidget())
+				if (auto *b = w->findChild<QPushButton *>("zoomCreateBtn"))
+					b->click();
+		});
+		QTimer::singleShot(1200, [] { // di Linux sumber Windows gagal -> kotak peringatan; tutup
+			if (auto *w = QApplication::activeModalWidget())
+				w->close();
+		});
+		if (act)
+			act->trigger();
+		expect(g_win->sceneManager()->sceneNames().contains("Zoom"), "Zoom: scene 'Zoom' terbuat lewat menu");
+		const auto zi = g_win->sceneManager()->items("Zoom");
+		printf("       item di scene Zoom (Linux: sumber Windows tidak tersedia): %lld\n", (long long)zi.size());
+	}});
+
+	static SettingsDialog *setDlg = nullptr;
+	steps.push_back({300, [&] {
+		setDlg = new SettingsDialog(g_win, SettingsDialog::Audio);
+		setDlg->show();
+		auto *nav = setDlg->findChild<QListWidget *>("settingsNav");
+		expect(nav && nav->count() == 4, "Pengaturan: sidebar 4 halaman (Output/Audio/Video/Plugin)", nav ? QString::number(nav->count()) : "-");
+		expect(nav && nav->currentRow() == 1, "Pengaturan: dibuka langsung di halaman Audio");
+		nav->setCurrentRow(2);
+		auto *vp = setDlg->findChild<QComboBox *>("videoPreset");
+		expect(vp && vp->count() == 4, "Pengaturan: halaman Video punya 4 preset");
+	}});
+	steps.push_back({900, [&] {
+		shot("18_pengaturan_video");
+		auto *nav = setDlg->findChild<QListWidget *>("settingsNav");
+		nav->setCurrentRow(0);
+	}});
+	steps.push_back({900, [&] {
+		shot("18_pengaturan_output");
+		auto *vp = setDlg->findChild<QComboBox *>("videoPreset");
+		vp->setCurrentIndex(2);
+		setDlg->findChild<QPushButton *>("settingsApply")->click();
+		QSettings qs("LiveStudio", "LiveStudio");
+		expect(qs.value("video/preset").toString() == "1280x720 @ 30", "Pengaturan: Terapkan menyimpan preset video", qs.value("video/preset").toString());
+		qs.remove("video/preset");
+		auto *nav = setDlg->findChild<QListWidget *>("settingsNav");
+		nav->setCurrentRow(3);
+	}});
+	steps.push_back({700, [&] {
+		shot("18_pengaturan_plugin");
+		setDlg->close();
+		delete setDlg;
+		setDlg = nullptr;
 	}});
 
 	size_t idx = 0;

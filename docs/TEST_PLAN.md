@@ -52,3 +52,9 @@ mencakup tampilan visual, kualitas kamera, level audio nyata, maupun multi-monit
 | 45 | Keluaran LED | Pilih monitor/prosesor LED > Buka | Jendela pas ukuran piksel, tanpa bingkai, Esc menutup | |
 | 46 | Pola uji | Centang Pola uji | Garis slice, nama, ukuran, crosshair tampak di LED | |
 | 47 | Scene dibelah | Preset "Satu scene dibelah" | Potongan scene tersebar di beberapa slice, benar urutannya | |
+| 48 | Jarak ala OBS | Pilih sumber kecil di Preview | Kotak merah + garis ke tepi kanvas + label "N px" | |
+| 49 | Galeri sumber | Sumber ▾ > Galeri sumber…; pilih tile "Baru Dibuat" > Tambah yang sudah ada | Sumber yang sama muncul di scene lain | |
+| 50 | Pengaturan | File > Pengaturan (Ctrl+,); ubah Output/Audio/Video; OK / Terapkan | Tersimpan; video berlaku setelah restart | |
+| 51 | Scene Zoom | Mulai rapat Zoom; Produksi > Scene Zoom…; Buat | Preview menampilkan jendela rapat Zoom; meter audio "Zoom: Audio rapat" bergerak saat peserta bicara | |
+| 52 | Zoom: jendela manual | Bila baris 51 hitam/kosong: buat ulang scene dan pilih jendela Zoom dari daftar | Gambar tampil | |
+| 53 | Zoom: gema | Pakai headset; siarkan scene Zoom | Peserta tidak mendengar suaranya sendiri | |

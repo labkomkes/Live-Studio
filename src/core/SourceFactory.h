@@ -20,6 +20,7 @@ QString textId();         // text_gdiplus_v*
 QString colorId();        // color_source_v*
 QString micId();          // wasapi_input_capture
 QString desktopAudioId(); // wasapi_output_capture
+QString appAudioId();     // wasapi_process_output_capture (audio per aplikasi)
 
 // Warna Qt -> format ABGR libobs.
 uint32_t toObsColor(const QColor &c, int alpha = 255);
@@ -27,6 +28,9 @@ uint32_t toObsColor(const QColor &c, int alpha = 255);
 Data webcamSettings(const QString &deviceValue, const QString &resolution /* "" = otomatis */);
 Data monitorSettings(const QString &monitorValue, bool captureCursor);
 Data windowSettings(const QString &windowValue);
+// Zoom: "" = otomatis (jendela rapat Zoom, kelas ZPContentViewWndClass). Selain itu nilai "window" dari daftar jendela.
+Data zoomWindowSettings(const QString &windowValue);
+Data appAudioSettings(const QString &windowValue);
 Data mediaSettings(const QString &path, bool loop, bool stayLoaded = false);
 Data imageSettings(const QString &path);
 // Mengatur warna teks untuk semua varian sumber teks (gdiplus & freetype2).

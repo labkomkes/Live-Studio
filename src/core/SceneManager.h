@@ -82,6 +82,8 @@ public:
 	QString addSource(const QString &scene, const QString &typeId, const QString &name, obs_data_t *settings,
 			  bool fitToCanvas);
 	bool removeItem(const QString &scene, const QString &name);
+	QList<ItemInfo> allSources() const;                                      // unik, dari semua scene
+	bool addExistingSource(const QString &scene, const QString &sourceName); // sumber yang sama di banyak scene
 	bool setItemVisible(const QString &scene, const QString &name, bool visible);
 	bool moveItem(const QString &scene, const QString &name, bool up);
 	static QString uniqueSourceName(const QString &base);

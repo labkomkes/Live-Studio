@@ -8,7 +8,10 @@
 #include "../core/SceneManager.h"
 #include "../core/SourceFactory.h"
 #include "AudioMixerWidget.h"
+#include "AddSourceDialog.h"
 #include "AudioInputDialog.h"
+#include "ZoomDialog.h"
+#include "SettingsDialog.h"
 #include "AudioSettingsDialog.h"
 #include "LedScreenDialog.h"
 #include "LedScreenWindow.h"
@@ -207,10 +210,71 @@ void MainWindow::buildSourceMenu()
 		{"Gambar…", SourceKind::Image},             {"Teks…", SourceKind::Text},
 		{"Input Audio (pilih driver)…", SourceKind::Mic},             {"Audio Desktop (suara komputer)…", SourceKind::DesktopAudio},
 	};
+	addSourceMenu_->addAction("Galeri sumber… (grid, pakai ulang)", this, [this] { openAddSourceDialog(); });
+	addSourceMenu_->addSeparator();
 	for (const Entry &e : entries) {
 		const SourceKind k = e.kind;
 		addSourceMenu_->addAction(e.label, this, [this, k] { addSourceOfKind(k); });
 	}
+	addSourceMenu_->addSeparator();
+	addSourceMenu_->addAction("Scene Zoom (jendela + audio rapat)…", this, [this] { createZoomScene(); });
+}
+
+void MainWindow::openAddSourceDialog()
+{
+	if (editedScene().isEmpty())
+		return;
+	AddSourceDialog dlg(sm_, this);
+	if (dlg.exec() != QDialog::Accepted)
+		return;
+	if (dlg.newKind() == AddSourceDialog::Zoom) {
+		createZoomScene();
+	} else if (dlg.newKind() >= 0) {
+		addSourceOfKind(static_cast<SourceKind>(dlg.newKind()));
+	} else if (!dlg.existingName().isEmpty()) {
+		if (sm_->addExistingSource(editedScene(), dlg.existingName())) {
+			audio_->refresh();
+			media_->refresh();
+			statusBar()->showMessage("Sumber dipakai ulang di scene Preview: " + dlg.existingName(), 5000);
+		} else {
+			QMessageBox::information(this, "Sumber", "Sumber itu sudah ada di scene ini.");
+		}
+	}
+}
+
+// Membuat scene Zoom: tangkap jendela rapat + audio aplikasi Zoom (+ mikrofon). Jendela/audio di Windows saja.
+void MainWindow::createZoomScene()
+{
+	ZoomDialog dlg(this);
+	if (dlg.exec() != QDialog::Accepted)
+		return;
+	const QString scene = sm_->createScene(dlg.sceneName());
+	if (scene.isEmpty())
+		return;
+	QStringList failed;
+	{
+		Data d = factory::zoomWindowSettings(dlg.windowValue());
+		if (sm_->addSource(scene, factory::windowId(), "Zoom: Jendela rapat", d.get(), true).isEmpty())
+			failed << "jendela Zoom (butuh Windows)";
+	}
+	if (dlg.captureAudio()) {
+		Data d = factory::appAudioSettings(dlg.windowValue());
+		if (sm_->addSource(scene, factory::appAudioId(), "Zoom: Audio rapat", d.get(), false).isEmpty())
+			failed << "audio Zoom (butuh Windows 10 2004+)";
+	}
+	if (dlg.addMic()) {
+		Data d = factory::audioDeviceSettings("default");
+		if (sm_->addSource(scene, factory::micId(), "Zoom: Mikrofon", d.get(), false).isEmpty())
+			failed << "mikrofon";
+	}
+	sm_->setPreview(scene);
+	audio_->refresh();
+	if (failed.isEmpty())
+		statusBar()->showMessage("Scene Zoom dibuat. Mulai rapat di Zoom, lalu CUT/TAKE ke Program.", 8000);
+	else
+		QMessageBox::warning(this, "Scene Zoom",
+				     "Scene dibuat, tetapi sumber ini gagal dibuat: " + failed.join(", ") +
+					     ". Lihat log di %APPDATA%\\LiveStudio\\logs.");
 }
 
 void MainWindow::buildUi()
@@ -477,7 +541,7 @@ QWidget *MainWindow::buildPanels(QWidget *parent)
 	// --- Audio Mixer ---
 	audio_ = new AudioMixerWidget(row);
 	QFrame *audioPanel = makePanel("Audio Mixer", audio_);
-	connect(audio_, &AudioMixerWidget::openSettingsRequested, this, [this] { AudioSettingsDialog(this).exec(); });
+	connect(audio_, &AudioMixerWidget::openSettingsRequested, this, [this] { SettingsDialog(this, SettingsDialog::Audio).exec(); });
 	// Tampilan Kanal butuh tinggi lebih: beri ruang pada panel di splitter.
 	connect(audio_, &AudioMixerWidget::viewModeChanged, this, [this](bool vertical) {
 		const int total = mainSplit_->height();
@@ -630,10 +694,7 @@ void MainWindow::buildMenus()
 	file->addAction("Simpan koleksi scene", this, [this] {
 		statusBar()->showMessage(sm_->save() ? "Koleksi scene disimpan." : "Gagal menyimpan koleksi.", 4000);
 	});
-	file->addAction("Pengaturan video…", this, &MainWindow::chooseVideoSettings);
-	file->addAction("Pengaturan output (rekam && siaran)…", this, [this] { OutputDialog(this).exec(); });
-	file->addAction("Pengaturan audio…", this, [this] { AudioSettingsDialog(this).exec(); });
-	file->addAction("Plugin…", this, [this] { PluginsDialog(this).exec(); });
+	file->addAction("Pengaturan…", QKeySequence("Ctrl+,"), this, [this] { SettingsDialog(this).exec(); });
 	file->addSeparator();
 	file->addAction("Keluar", this, &QWidget::close);
 
@@ -660,6 +721,7 @@ void MainWindow::buildMenus()
 	QMenu *prod = menuBar()->addMenu("&Produksi");
 	prod->addAction("Mulai / Hentikan Rekaman", QKeySequence("Ctrl+R"), this, [this] { toggleRecording(); });
 	prod->addAction("Mulai / Hentikan Siaran", QKeySequence("Ctrl+L"), this, [this] { toggleStreaming(); });
+	prod->addAction("Scene Zoom…", this, [this] { createZoomScene(); });
 	prod->addAction("Layar LED / Mapping…", QKeySequence("Ctrl+M"), this, [this] {
 		auto *d = ledDialog();
 		d->show();
@@ -1211,15 +1273,15 @@ void MainWindow::buildStatusBar()
 	auto *audioBtn = new QPushButton("Audio ⚙", sb);
 	audioBtn->setObjectName("statusBtn");
 	audioBtn->setToolTip("Pengaturan audio: perangkat monitor, mikrofon, audio desktop");
-	connect(audioBtn, &QPushButton::clicked, this, [this] { AudioSettingsDialog(this).exec(); });
+	connect(audioBtn, &QPushButton::clicked, this, [this] { SettingsDialog(this, SettingsDialog::Audio).exec(); });
 	auto *plugBtn = new QPushButton("Plugin", sb);
 	plugBtn->setObjectName("statusBtn");
 	plugBtn->setToolTip("Daftar plugin yang termuat dan folder plugin tambahan");
-	connect(plugBtn, &QPushButton::clicked, this, [this] { PluginsDialog(this).exec(); });
+	connect(plugBtn, &QPushButton::clicked, this, [this] { SettingsDialog(this, SettingsDialog::Plugins).exec(); });
 	auto *outBtn = new QPushButton("Output ⚙", sb);
 	outBtn->setObjectName("statusBtn");
 	outBtn->setToolTip("Pengaturan rekam & siaran");
-	connect(outBtn, &QPushButton::clicked, this, [this] { OutputDialog(this).exec(); });
+	connect(outBtn, &QPushButton::clicked, this, [this] { SettingsDialog(this, SettingsDialog::Output).exec(); });
 	recBtn_ = new QPushButton("● Rekam", sb);
 	recBtn_->setObjectName("recButton");
 	recBtn_->setToolTip("Mulai/hentikan rekaman (Ctrl+R)");

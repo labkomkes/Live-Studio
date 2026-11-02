@@ -128,3 +128,15 @@ QDialog { background:#232323; }
 QComboBox { background:#2c2c2c; border:1px solid #444; border-radius:3px; padding:3px 8px; }
 QComboBox QAbstractItemView { background:#2c2c2c; color:#e0e0e0; selection-background-color:#3d6db3; }
 QSpinBox, QDoubleSpinBox, QLineEdit { background:#2a2a2a; border:1px solid #444; border-radius:3px; padding:3px 6px; color:#e6e6e6; }
+
+/* ---- Pengaturan & Tambah Sumber (gaya OBS) ---- */
+#settingsNav, #addCatList { background: #1e1f24; border: 1px solid #2c2e35; border-radius: 4px; outline: 0; padding: 4px; }
+#settingsNav::item, #addCatList::item { padding: 8px 10px; border-radius: 3px; color: #d8d8dc; }
+#settingsNav::item:selected, #addCatList::item:selected { background: #2f5fd0; color: white; }
+#settingsNav::item:hover:!selected, #addCatList::item:hover:!selected { background: #2a2c33; }
+#addTileList { background: #1b1c21; border: 1px solid #2c2e35; border-radius: 4px; outline: 0; }
+#addTileList::item { color: #e0e0e4; padding: 4px; border-radius: 4px; }
+#addTileList::item:selected { background: #2f5fd0; }
+#addTileList::item:hover:!selected { background: #2a2c33; }
+#addTitle { font-size: 16px; font-weight: bold; }
+#addHint, #settingsNote, #zoomNote { color: #9a9aa4; }

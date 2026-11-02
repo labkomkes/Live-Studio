@@ -21,6 +21,7 @@ sedikit panel) dan **Profesional** (semua panel).
 | Tata letak otomatis sumber | `SceneManager::applyLayout` |
 | Editor bebas di Preview (geser/resize/snap/crop/rotasi/kunci) | `src/ui/PreviewEditor.*`, `TransformDialog.*` |
 | Layar LED ala Resolume (ukuran layar, slice, isi per scene, pola uji) | `src/core/LedScreen.*`, `src/ui/LedScreenDialog.*`, `LedScreenWindow.*` |
+| Galeri Tambah Sumber, Pengaturan bersidebar, Scene Zoom | `src/ui/AddSourceDialog.*`, `SettingsDialog.*`, `ZoomDialog.*` |
 | Lower third | `src/core/LowerThird.*`, `src/ui/LowerThirdPanel.*` |
 | Bumper webinar (putar video bumper lalu kembali ke scene sebelumnya) | `src/core/Bumper.*`, `src/ui/BumperPanel.*` |
 | **Deck ala vMix**: tile scene dengan thumbnail live, CUT/TAKE per tile, tombol transisi | `src/ui/DeckStrip.*`, `DeckLayout.h`, `Render.cpp` |
